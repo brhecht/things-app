@@ -5,7 +5,7 @@ import KanbanBoard from './components/KanbanBoard'
 import SignInPage from './components/SignInPage'
 
 export default function App() {
-  const { user, authLoading, initAuth } = useStore()
+  const { user, authLoading, isViewer, initAuth } = useStore()
   const [filters, setFilters] = useState({ starred: false, priorities: [] })
 
   // Start listening to auth state once on mount
@@ -34,8 +34,15 @@ export default function App() {
   return (
     <div className="flex h-screen overflow-hidden bg-white font-sans antialiased">
       <Sidebar filters={filters} setFilters={setFilters} />
-      <main className="flex-1 overflow-hidden">
-        <KanbanBoard filters={filters} />
+      <main className="flex-1 overflow-hidden flex flex-col">
+        {isViewer && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-700 text-center">
+            View only — you're viewing Brian's tasks
+          </div>
+        )}
+        <div className="flex-1 overflow-hidden">
+          <KanbanBoard filters={filters} />
+        </div>
       </main>
     </div>
   )

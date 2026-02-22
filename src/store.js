@@ -12,7 +12,14 @@ import {
   removeProject,
   batchUpsertTasks,
   batchUpsertProjects,
+  saveOwnerUid,
+  getOwnerUid,
+  registerViewer,
 } from './firebase'
+
+// ── Sharing config ──────────────────────────────────────────────
+const OWNER_EMAIL = 'brhnyc1970@gmail.com'
+const ALLOWED_VIEWERS = ['nico@humbleconviction.com']
 
 let counter = 1
 const uid = () => `id-${Date.now()}-${counter++}`
@@ -45,6 +52,7 @@ const useStore = create((set, get) => ({
   // ── Auth state ────────────────────────────────────────────────
   user: null,
   authLoading: true,
+  isViewer: false,   // true when a viewer is looking at the owner's data
 
   // ── Data ──────────────────────────────────────────────────────
   projects: [],
@@ -66,18 +74,39 @@ const useStore = create((set, get) => ({
     if (_unsubTasks) _unsubTasks()
     if (_unsubProjects) _unsubProjects()
     await logOut()
-    set({ user: null, tasks: [], projects: [], selectedProjectId: null, _unsubTasks: null, _unsubProjects: null })
+    set({ user: null, isViewer: false, tasks: [], projects: [], selectedProjectId: null, _unsubTasks: null, _unsubProjects: null })
   },
 
   /** Call once at app startup to listen to auth changes. */
   initAuth: () => {
     onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        set({ user: firebaseUser, authLoading: false })
-        // Start Firestore listeners
-        get()._startSync(firebaseUser.uid)
+        const email = firebaseUser.email?.toLowerCase()
+
+        if (email === OWNER_EMAIL) {
+          // Owner: save UID for viewers to find, then sync own data
+          await saveOwnerUid(firebaseUser.uid)
+          set({ user: firebaseUser, authLoading: false, isViewer: false })
+          get()._startSync(firebaseUser.uid)
+
+        } else if (ALLOWED_VIEWERS.includes(email)) {
+          // Viewer: find the owner's UID and subscribe to their data (read-only)
+          const ownerUid = await getOwnerUid()
+          if (ownerUid) {
+            await registerViewer(ownerUid, firebaseUser.uid)
+            set({ user: firebaseUser, authLoading: false, isViewer: true })
+            get()._startSync(ownerUid)
+          } else {
+            set({ user: firebaseUser, authLoading: false, isViewer: true })
+          }
+
+        } else {
+          // Unknown user: sign them in to their own empty space
+          set({ user: firebaseUser, authLoading: false, isViewer: false })
+          get()._startSync(firebaseUser.uid)
+        }
       } else {
-        set({ user: null, authLoading: false, tasks: [], projects: [] })
+        set({ user: null, authLoading: false, isViewer: false, tasks: [], projects: [] })
       }
     })
   },
@@ -112,35 +141,35 @@ const useStore = create((set, get) => ({
     set({ _unsubTasks: unsubTasks, _unsubProjects: unsubProjects })
   },
 
-  // ── Project actions ───────────────────────────────────────────
+  // ── Project actions (disabled for viewers) ─────────────────────
   addProject: (name) => {
-    const { user } = get()
-    if (!user) return
+    const { user, isViewer } = get()
+    if (!user || isViewer) return
     const project = { id: uid(), name }
     upsertProject(user.uid, project)
     // Firestore listener will update the store
   },
 
   renameProject: (id, name) => {
-    const { user, projects } = get()
-    if (!user) return
+    const { user, isViewer, projects } = get()
+    if (!user || isViewer) return
     const proj = projects.find((p) => p.id === id)
     if (proj) upsertProject(user.uid, { ...proj, name })
   },
 
   deleteProject: (id) => {
-    const { user, tasks, selectedProjectId } = get()
-    if (!user) return
+    const { user, isViewer, tasks, selectedProjectId } = get()
+    if (!user || isViewer) return
     removeProject(user.uid, id)
     // Also delete all tasks in that project
     tasks.filter((t) => t.projectId === id).forEach((t) => removeTask(user.uid, t.id))
     if (selectedProjectId === id) set({ selectedProjectId: null })
   },
 
-  // ── Task actions ──────────────────────────────────────────────
+  // ── Task actions (disabled for viewers) ────────────────────────
   addTask: (title, projectId, bucket = 'today') => {
-    const { user } = get()
-    if (!user) return
+    const { user, isViewer } = get()
+    if (!user || isViewer) return
     const task = {
       id: uid(),
       title,
@@ -157,21 +186,21 @@ const useStore = create((set, get) => ({
   },
 
   updateTask: (id, updates) => {
-    const { user, tasks } = get()
-    if (!user) return
+    const { user, isViewer, tasks } = get()
+    if (!user || isViewer) return
     const existing = tasks.find((t) => t.id === id)
     if (existing) upsertTask(user.uid, { ...existing, ...updates })
   },
 
   deleteTask: (id) => {
-    const { user } = get()
-    if (!user) return
+    const { user, isViewer } = get()
+    if (!user || isViewer) return
     removeTask(user.uid, id)
   },
 
   moveTask: (id, bucket) => {
-    const { user, tasks } = get()
-    if (!user) return
+    const { user, isViewer, tasks } = get()
+    if (!user || isViewer) return
     const existing = tasks.find((t) => t.id === id)
     if (existing) upsertTask(user.uid, { ...existing, bucket })
   },

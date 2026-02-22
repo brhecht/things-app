@@ -4,6 +4,7 @@ import {
   collection,
   doc,
   setDoc,
+  getDoc,
   deleteDoc,
   onSnapshot,
   writeBatch,
@@ -89,4 +90,22 @@ export async function batchUpsertProjects(uid, projects) {
   const batch = writeBatch(db)
   projects.forEach((p) => batch.set(doc(db, 'users', uid, 'projects', p.id), p, { merge: true }))
   await batch.commit()
+}
+
+// ── Sharing helpers ───────────────────────────────────────────────
+
+/** Save the owner's UID so viewers can find it. */
+export function saveOwnerUid(uid) {
+  return setDoc(doc(db, 'appConfig', 'owner'), { uid })
+}
+
+/** Read the owner's UID. */
+export async function getOwnerUid() {
+  const snap = await getDoc(doc(db, 'appConfig', 'owner'))
+  return snap.exists() ? snap.data().uid : null
+}
+
+/** Register a viewer so Firestore rules allow them to read. */
+export function registerViewer(ownerUid, viewerUid) {
+  return setDoc(doc(db, 'users', ownerUid, 'viewers', viewerUid), { granted: true })
 }
