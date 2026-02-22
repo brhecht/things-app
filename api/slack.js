@@ -27,19 +27,42 @@ function getDb() {
   return getFirestore()
 }
 
-// Parse a message like "Call accountant #personal finance" into { title, projectId }
+// Bucket name → id mapping
+const BUCKET_MAP = {
+  'inbox':     'inbox',
+  'today':     'today',
+  'tomorrow':  'tomorrow',
+  'this week': 'soon',
+  'week':      'soon',
+  'soon':      'soon',
+  'later':     'someday',
+  'someday':   'someday',
+}
+
+// Parse a message like "Call accountant #personal finance #today" into { title, projectId, bucket }
 function parseMessage(text) {
   let cleaned = text.replace(/<@[A-Z0-9]+>/g, '').trim()
 
   let projectId = null
-  const hashMatch = cleaned.match(/#([^#]+)$/)
-  if (hashMatch) {
-    const tag = hashMatch[1].trim().toLowerCase()
-    projectId = PROJECT_MAP[tag] || null
-    cleaned = cleaned.replace(/#([^#]+)$/, '').trim()
+  let bucket = 'inbox'
+
+  // Extract all #tags
+  const tags = []
+  cleaned = cleaned.replace(/#([^#]+?)(?=#|$)/g, (_, tag) => {
+    tags.push(tag.trim().toLowerCase())
+    return ''
+  }).trim()
+
+  // Match tags to projects or buckets
+  for (const tag of tags) {
+    if (BUCKET_MAP[tag]) {
+      bucket = BUCKET_MAP[tag]
+    } else if (PROJECT_MAP[tag]) {
+      projectId = PROJECT_MAP[tag]
+    }
   }
 
-  return { title: cleaned, projectId }
+  return { title: cleaned, projectId, bucket }
 }
 
 async function slackReply(channel, text) {
@@ -71,7 +94,7 @@ export default async function handler(req, res) {
       const event = body.event
 
       if (event.type === 'message' && !event.bot_id && !event.subtype) {
-        const { title, projectId } = parseMessage(event.text || '')
+        const { title, projectId, bucket } = parseMessage(event.text || '')
 
         if (!title) {
           await slackReply(event.channel, "I couldn't parse a task from that. Just send me the task title!")
@@ -83,7 +106,7 @@ export default async function handler(req, res) {
           id: taskId,
           title,
           projectId,
-          bucket: 'inbox',
+          bucket,
           priority: null,
           notes: '',
           tags: [],
@@ -100,7 +123,8 @@ export default async function handler(req, res) {
         const projectLabel = projectId
           ? ` \u2192 ${Object.entries(PROJECT_MAP).find(([, v]) => v === projectId)?.[0] || projectId}`
           : ''
-        await slackReply(event.channel, `\u2705 Added to Inbox: "${title}"${projectLabel}`)
+        const bucketLabel = bucket !== 'inbox' ? ` [${Object.entries(BUCKET_MAP).find(([, v]) => v === bucket)?.[0] || bucket}]` : ''
+        await slackReply(event.channel, `\u2705 Added${bucketLabel || ' to Inbox'}: "${title}"${projectLabel}`)
       }
 
       return res.status(200).json({ ok: true })
