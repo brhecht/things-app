@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import useStore from './store'
 import Sidebar from './components/Sidebar'
 import KanbanBoard from './components/KanbanBoard'
+import AgendaView from './components/AgendaView'
 import SignInPage from './components/SignInPage'
 
 export default function App() {
   const { user, authLoading, isViewer, initAuth } = useStore()
   const [filters, setFilters] = useState({ starred: false, priorities: [] })
+  const [view, setView] = useState('kanban') // 'kanban' or 'agenda'
 
   // Start listening to auth state once on mount
   useEffect(() => {
@@ -40,8 +42,31 @@ export default function App() {
             View only — you're viewing Brian's tasks
           </div>
         )}
+        {/* View toggle */}
+        <div className="flex items-center gap-1 px-8 pt-4 bg-gray-50">
+          <button
+            onClick={() => setView('kanban')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+              view === 'kanban' ? 'bg-white text-gray-800 shadow-sm border border-gray-200' : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            Board
+          </button>
+          <button
+            onClick={() => setView('agenda')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+              view === 'agenda' ? 'bg-white text-gray-800 shadow-sm border border-gray-200' : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            Agenda
+          </button>
+        </div>
         <div className="flex-1 overflow-hidden">
-          <KanbanBoard filters={filters} />
+          {view === 'kanban' ? (
+            <KanbanBoard filters={filters} />
+          ) : (
+            <AgendaView filters={filters} />
+          )}
         </div>
       </main>
     </div>

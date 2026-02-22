@@ -26,13 +26,27 @@ export default function TaskModal({ task, onClose }) {
   const [tagInput,  setTagInput]  = useState('')
   const [projectId, setProjectId] = useState(task.projectId)
   const [bucket,    setBucket]    = useState(task.bucket)
+  const [dueDate,   setDueDate]   = useState(task.dueDate || '')
 
   const titleRef = useRef(null)
   useEffect(() => { titleRef.current?.focus() }, [])
 
   const handleSave = () => {
     if (title.trim()) {
-      updateTask(task.id, { title: title.trim(), notes, priority, tags, projectId, bucket })
+      // Auto-set bucket based on due date
+      let finalBucket = bucket
+      if (dueDate) {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const due = new Date(dueDate + 'T00:00:00')
+        const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24))
+
+        if (diffDays <= 0) finalBucket = 'today'
+        else if (diffDays === 1) finalBucket = 'tomorrow'
+        else if (diffDays <= 7) finalBucket = 'soon'
+        else finalBucket = 'someday'
+      }
+      updateTask(task.id, { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null })
     }
     onClose()
   }
@@ -100,6 +114,27 @@ export default function TaskModal({ task, onClose }) {
             >
               {BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
             </select>
+          </div>
+
+          {/* Due date */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-gray-400 w-20 flex-shrink-0">Due</label>
+            <div className="flex items-center gap-2 flex-1">
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400"
+              />
+              {dueDate && (
+                <button
+                  onClick={() => setDueDate('')}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Priority */}

@@ -174,7 +174,7 @@ const useStore = create((set, get) => ({
             upsertTask(userId, { ...t, projectId: 'unassigned' })
           }
         })
-      }
+        }
       set({ tasks })
     })
 

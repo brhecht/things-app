@@ -1,9 +1,9 @@
 import useStore from '../store'
 
 const PRIORITY_BORDER = {
-  high:   'border-l-[3px] border-l-red-200',
-  medium: 'border-l-[3px] border-l-amber-200',
-  low:    'border-l-[3px] border-l-sky-200',
+  high:   'border-l-[3px] border-l-emerald-500',
+  medium: 'border-l-[3px] border-l-amber-400',
+  low:    'border-l-[3px] border-l-violet-400',
 }
 
 export default function TaskCard({ task, onClick }) {
@@ -18,7 +18,7 @@ export default function TaskCard({ task, onClick }) {
     e.stopPropagation()
     if (!task.starred) {
       // Starring: set sortWeight so it keeps priority even after unstarring
-      updateTask(task.id, { starred: true, sortWeight: Date.now() })
+      updateTask(task.id, { starred: true, sortWeight: Date.now(), priority: 'high' })
     } else {
       updateTask(task.id, { starred: false })
     }
