@@ -9,6 +9,7 @@ const PRIORITIES = [
 ]
 
 const BUCKETS = [
+  { value: 'inbox',    label: 'Inbox' },
   { value: 'today',    label: 'Today' },
   { value: 'tomorrow', label: 'Tomorrow' },
   { value: 'soon',     label: 'Soon' },

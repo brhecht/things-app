@@ -12,6 +12,7 @@ const PROJECT_COLORS = {
   'georgetown':       'bg-rose-100 text-rose-700',
   'friends':          'bg-pink-100 text-pink-700',
   'from-nico':        'bg-lime-100 text-lime-700',
+  'unassigned':       'bg-stone-100 text-stone-600',
 }
 
 const DOT_COLORS = {
@@ -25,6 +26,7 @@ const DOT_COLORS = {
   'georgetown':       'bg-rose-400',
   'friends':          'bg-pink-400',
   'from-nico':        'bg-lime-400',
+  'unassigned':       'bg-stone-400',
 }
 
 const PRIORITY_LABELS = { high: '🔴 High', medium: '🟡 Medium', low: '🔵 Low' }

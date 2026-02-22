@@ -103,8 +103,9 @@ export default async function handler(req, res) {
         }
 
         // If sender is not the owner, auto-assign to "From Nico" project
+        // If no project specified, default to "unassigned"
         const isOwner = event.user === OWNER_SLACK_ID
-        const finalProjectId = (!isOwner && !projectId) ? 'from-nico' : projectId
+        const finalProjectId = (!isOwner && !projectId) ? 'from-nico' : (projectId || 'unassigned')
 
         const taskId = `slack-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
         const task = {

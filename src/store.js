@@ -28,7 +28,7 @@ const uid = () => `id-${Date.now()}-${counter++}`
 const PROJECT_ORDER = [
   'hc-admin', 'hc-content', 'hc-revenue', 'portfolio',
   'life-admin', 'personal-finance', 'network', 'georgetown', 'friends',
-  'from-nico',
+  'from-nico', 'unassigned',
 ]
 
 // Default projects for brand-new users (first sign-in)
@@ -150,6 +150,12 @@ const useStore = create((set, get) => ({
         return // snapshot will re-fire with the new project
       }
 
+      // One-time: add Unassigned project if it doesn't exist yet
+      if (!projects.find((p) => p.id === 'unassigned')) {
+        upsertProject(userId, { id: 'unassigned', name: 'Unassigned' })
+        return // snapshot will re-fire with the new project
+      }
+
       // Sort projects by fixed display order
       projects.sort((a, b) => {
         const ai = PROJECT_ORDER.indexOf(a.id)
@@ -160,6 +166,15 @@ const useStore = create((set, get) => ({
     })
 
     const unsubTasks = subscribeTasks(userId, (tasks) => {
+      // Auto-fix tasks with no project — assign to "unassigned"
+      const { isViewer } = get()
+      if (!isViewer) {
+        tasks.forEach((t) => {
+          if (!t.projectId) {
+            upsertTask(userId, { ...t, projectId: 'unassigned' })
+          }
+        })
+      }
       set({ tasks })
     })
 

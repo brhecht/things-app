@@ -44,10 +44,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing "title" field' })
     }
 
-    // Resolve project name to ID (case-insensitive)
-    let projectId = null
+    // Resolve project name to ID (case-insensitive), default to "unassigned"
+    let projectId = 'unassigned'
     if (project) {
-      projectId = PROJECT_MAP[project.toLowerCase()] || null
+      projectId = PROJECT_MAP[project.toLowerCase()] || 'unassigned'
     }
 
     // Build the task

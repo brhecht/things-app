@@ -22,6 +22,7 @@ const PROJECT_COLORS = {
   'georgetown':       'bg-rose-100 text-rose-700',
   'friends':          'bg-pink-100 text-pink-700',
   'from-nico':        'bg-lime-100 text-lime-700',
+  'unassigned':       'bg-stone-100 text-stone-600',
 }
 
 function Column({ bucket, tasks, projects, onTaskClick }) {
