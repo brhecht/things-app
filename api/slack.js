@@ -1,13 +1,12 @@
-import { initializeApp, cert, getApps } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
+const admin = require('firebase-admin')
 
 // Initialize Firebase Admin (once)
-if (!getApps().length) {
-  initializeApp({
-    credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
   })
 }
-const db = getFirestore()
+const db = admin.firestore()
 
 const OWNER_UID = process.env.OWNER_UID
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN
@@ -56,7 +55,7 @@ async function slackReply(channel, text) {
   })
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -100,9 +99,9 @@ export default async function handler(req, res) {
       await db.collection('users').doc(OWNER_UID).collection('tasks').doc(taskId).set(task)
 
       const projectLabel = projectId
-        ? ` → ${Object.entries(PROJECT_MAP).find(([, v]) => v === projectId)?.[0] || projectId}`
+        ? ` \u2192 ${Object.entries(PROJECT_MAP).find(([, v]) => v === projectId)?.[0] || projectId}`
         : ''
-      await slackReply(event.channel, `✅ Added to Inbox: "${title}"${projectLabel}`)
+      await slackReply(event.channel, `\u2705 Added to Inbox: "${title}"${projectLabel}`)
     }
 
     return res.status(200).json({ ok: true })

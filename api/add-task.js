@@ -1,13 +1,12 @@
-import { initializeApp, cert, getApps } from 'firebase-admin/app'
-import { getFirestore } from 'firebase-admin/firestore'
+const admin = require('firebase-admin')
 
 // Initialize Firebase Admin (once)
-if (!getApps().length) {
-  initializeApp({
-    credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
   })
 }
-const db = getFirestore()
+const db = admin.firestore()
 
 // The owner's UID — tasks are written to their collection
 const OWNER_UID = process.env.OWNER_UID
@@ -27,7 +26,7 @@ const PROJECT_MAP = {
   'misc':              'misc',
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
