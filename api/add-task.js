@@ -1,4 +1,5 @@
-import * as admin from 'firebase-admin'
+import { initializeApp, getApps, cert } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
 
 // Project name → id mapping for Slack shorthand tags
 const PROJECT_MAP = {
@@ -16,12 +17,12 @@ const PROJECT_MAP = {
 }
 
 function getDb() {
-  if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
+  if (!getApps().length) {
+    initializeApp({
+      credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
     })
   }
-  return admin.firestore()
+  return getFirestore()
 }
 
 export default async function handler(req, res) {
