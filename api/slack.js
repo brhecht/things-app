@@ -1,4 +1,4 @@
-const admin = require('firebase-admin')
+import admin from 'firebase-admin'
 
 // Initialize Firebase Admin (once)
 if (!admin.apps.length) {
@@ -55,7 +55,7 @@ async function slackReply(channel, text) {
   })
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
