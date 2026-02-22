@@ -24,14 +24,21 @@ const ALLOWED_VIEWERS = ['nico@humbleconviction.com']
 let counter = 1
 const uid = () => `id-${Date.now()}-${counter++}`
 
+// Fixed display order for projects (sidebar + kanban lanes)
+const PROJECT_ORDER = [
+  'hc-admin', 'hc-content', 'hc-revenue', 'portfolio',
+  'life-admin', 'personal-finance', 'network', 'georgetown', 'friends',
+]
+
 // Default projects for brand-new users (first sign-in)
 const SEED_PROJECTS = [
-  { id: 'hc-admin',         name: 'HC Admin' },
+  { id: 'hc-admin',         name: 'Humble Admin' },
   { id: 'hc-content',       name: 'HC Content' },
   { id: 'hc-revenue',       name: 'HC Revenue' },
   { id: 'portfolio',        name: 'Portfolio' },
-  { id: 'personal-finance', name: 'Personal Finance' },
   { id: 'life-admin',       name: 'Life Admin' },
+  { id: 'personal-finance', name: 'Personal Finance' },
+  { id: 'network',          name: 'Network' },
   { id: 'georgetown',       name: 'Georgetown' },
   { id: 'friends',          name: 'Friends' },
   { id: 'misc',             name: 'Misc' },
@@ -129,8 +136,19 @@ const useStore = create((set, get) => ({
         return // The snapshot listener will fire again with the seeded data
       }
       projectsLoaded = true
-      // Sort projects to keep a stable order
-      projects.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+
+      // One-time: add Network project if it doesn't exist yet
+      if (!projects.find((p) => p.id === 'network')) {
+        upsertProject(userId, { id: 'network', name: 'Network' })
+        return // snapshot will re-fire with the new project
+      }
+
+      // Sort projects by fixed display order
+      projects.sort((a, b) => {
+        const ai = PROJECT_ORDER.indexOf(a.id)
+        const bi = PROJECT_ORDER.indexOf(b.id)
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+      })
       set({ projects })
     })
 

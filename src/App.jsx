@@ -19,7 +19,7 @@ export default function App() {
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4" />
-          <p className="text-gray-600 font-medium">Loading…</p>
+          <p className="text-gray-600 font-medium">Loading Things…</p>
         </div>
       </div>
     )

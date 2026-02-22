@@ -16,7 +16,12 @@ export default function TaskCard({ task, onClick }) {
 
   const handleStar = (e) => {
     e.stopPropagation()
-    updateTask(task.id, { starred: !task.starred })
+    if (!task.starred) {
+      // Starring: set sortWeight so it keeps priority even after unstarring
+      updateTask(task.id, { starred: true, sortWeight: Date.now() })
+    } else {
+      updateTask(task.id, { starred: false })
+    }
   }
 
   const handleDelete = (e) => {

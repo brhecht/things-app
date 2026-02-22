@@ -8,6 +8,7 @@ const PROJECT_COLORS = {
   'portfolio':        'bg-purple-100 text-purple-700',
   'personal-finance': 'bg-teal-100 text-teal-700',
   'life-admin':       'bg-orange-100 text-orange-700',
+  'network':          'bg-cyan-100 text-cyan-700',
   'georgetown':       'bg-rose-100 text-rose-700',
   'friends':          'bg-pink-100 text-pink-700',
 }
@@ -19,6 +20,7 @@ const DOT_COLORS = {
   'portfolio':        'bg-purple-400',
   'personal-finance': 'bg-teal-400',
   'life-admin':       'bg-orange-400',
+  'network':          'bg-cyan-400',
   'georgetown':       'bg-rose-400',
   'friends':          'bg-pink-400',
 }

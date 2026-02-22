@@ -4,6 +4,7 @@ import TaskCard from './TaskCard'
 import TaskModal from './TaskModal'
 
 const BUCKETS = [
+  { id: 'inbox',    label: 'Inbox',    accent: 'text-orange-600', border: 'border-orange-200', dropBg: 'bg-orange-50', count: 'bg-orange-100 text-orange-700' },
   { id: 'today',    label: 'Today',    accent: 'text-blue-600',   border: 'border-blue-200',   dropBg: 'bg-blue-50',   count: 'bg-blue-100 text-blue-700' },
   { id: 'tomorrow', label: 'Tomorrow', accent: 'text-indigo-600', border: 'border-indigo-200', dropBg: 'bg-indigo-50', count: 'bg-indigo-100 text-indigo-700' },
   { id: 'soon',     label: 'This Week',     accent: 'text-violet-600', border: 'border-violet-200', dropBg: 'bg-violet-50', count: 'bg-violet-100 text-violet-700' },
@@ -17,6 +18,7 @@ const PROJECT_COLORS = {
   'portfolio':        'bg-purple-100 text-purple-700',
   'personal-finance': 'bg-teal-100 text-teal-700',
   'life-admin':       'bg-orange-100 text-orange-700',
+  'network':          'bg-cyan-100 text-cyan-700',
   'georgetown':       'bg-rose-100 text-rose-700',
   'friends':          'bg-pink-100 text-pink-700',
 }
@@ -37,9 +39,25 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
     }
   }
 
+  // Split tasks: ones with a project vs unassigned (inbox items)
+  const unassigned = tasks
+    .filter((t) => !t.projectId)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+
   // Group tasks by project, maintaining project list order
+  // Within each project: starred first, then by sortWeight (highest = most recently starred/promoted)
   const grouped = projects
-    .map((proj) => ({ proj, tasks: tasks.filter((t) => t.projectId === proj.id) }))
+    .map((proj) => ({
+      proj,
+      tasks: tasks
+        .filter((t) => t.projectId === proj.id)
+        .sort((a, b) => {
+          // Starred always on top
+          if (a.starred !== b.starred) return b.starred ? 1 : -1
+          // Then by sortWeight (recently starred/unstarred tasks stay near top)
+          return (b.sortWeight || 0) - (a.sortWeight || 0)
+        }),
+    }))
     .filter(({ tasks }) => tasks.length > 0)
 
   return (
@@ -57,6 +75,15 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
         onDrop={(e) => { e.preventDefault(); setIsOver(false); const id = e.dataTransfer.getData('taskId'); if (id) moveTask(id, bucket.id) }}
         className={`flex-1 min-h-[120px] rounded-2xl p-2 -m-2 transition-colors duration-150 space-y-4 ${isOver ? bucket.dropBg : ''}`}
       >
+        {/* Unassigned tasks (no project — typically inbox items) */}
+        {unassigned.length > 0 && (
+          <div className="space-y-2">
+            {unassigned.map((task) => (
+              <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
+            ))}
+          </div>
+        )}
+
         {/* Project groups */}
         {grouped.map(({ proj, tasks: projTasks }) => (
           <div key={proj.id}>
