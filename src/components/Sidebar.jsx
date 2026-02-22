@@ -11,6 +11,7 @@ const PROJECT_COLORS = {
   'network':          'bg-cyan-100 text-cyan-700',
   'georgetown':       'bg-rose-100 text-rose-700',
   'friends':          'bg-pink-100 text-pink-700',
+  'from-nico':        'bg-lime-100 text-lime-700',
 }
 
 const DOT_COLORS = {
@@ -23,6 +24,7 @@ const DOT_COLORS = {
   'network':          'bg-cyan-400',
   'georgetown':       'bg-rose-400',
   'friends':          'bg-pink-400',
+  'from-nico':        'bg-lime-400',
 }
 
 const PRIORITY_LABELS = { high: '🔴 High', medium: '🟡 Medium', low: '🔵 Low' }

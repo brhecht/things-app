@@ -2,6 +2,7 @@ import { initializeApp, getApps, cert } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN
+const OWNER_SLACK_ID = process.env.OWNER_SLACK_ID  // Brian's Slack user ID
 
 // Project name → id mapping
 const PROJECT_MAP = {
@@ -101,11 +102,15 @@ export default async function handler(req, res) {
           return res.status(200).json({ ok: true })
         }
 
+        // If sender is not the owner, auto-assign to "From Nico" project
+        const isOwner = event.user === OWNER_SLACK_ID
+        const finalProjectId = (!isOwner && !projectId) ? 'from-nico' : projectId
+
         const taskId = `slack-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
         const task = {
           id: taskId,
           title,
-          projectId,
+          projectId: finalProjectId,
           bucket,
           priority: null,
           notes: '',
@@ -120,8 +125,8 @@ export default async function handler(req, res) {
         const OWNER_UID = process.env.OWNER_UID
         await db.collection('users').doc(OWNER_UID).collection('tasks').doc(taskId).set(task)
 
-        const projectLabel = projectId
-          ? ` \u2192 ${Object.entries(PROJECT_MAP).find(([, v]) => v === projectId)?.[0] || projectId}`
+        const projectLabel = finalProjectId
+          ? ` \u2192 ${finalProjectId === 'from-nico' ? 'From Nico' : (Object.entries(PROJECT_MAP).find(([, v]) => v === finalProjectId)?.[0] || finalProjectId)}`
           : ''
         const bucketLabel = bucket !== 'inbox' ? ` [${Object.entries(BUCKET_MAP).find(([, v]) => v === bucket)?.[0] || bucket}]` : ''
         await slackReply(event.channel, `\u2705 Added${bucketLabel || ' to Inbox'}: "${title}"${projectLabel}`)

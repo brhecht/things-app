@@ -21,6 +21,7 @@ const PROJECT_COLORS = {
   'network':          'bg-cyan-100 text-cyan-700',
   'georgetown':       'bg-rose-100 text-rose-700',
   'friends':          'bg-pink-100 text-pink-700',
+  'from-nico':        'bg-lime-100 text-lime-700',
 }
 
 function Column({ bucket, tasks, projects, onTaskClick }) {

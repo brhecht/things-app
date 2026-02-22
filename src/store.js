@@ -28,6 +28,7 @@ const uid = () => `id-${Date.now()}-${counter++}`
 const PROJECT_ORDER = [
   'hc-admin', 'hc-content', 'hc-revenue', 'portfolio',
   'life-admin', 'personal-finance', 'network', 'georgetown', 'friends',
+  'from-nico',
 ]
 
 // Default projects for brand-new users (first sign-in)
@@ -140,6 +141,12 @@ const useStore = create((set, get) => ({
       // One-time: add Network project if it doesn't exist yet
       if (!projects.find((p) => p.id === 'network')) {
         upsertProject(userId, { id: 'network', name: 'Network' })
+        return // snapshot will re-fire with the new project
+      }
+
+      // One-time: add From Nico project if it doesn't exist yet
+      if (!projects.find((p) => p.id === 'from-nico')) {
+        upsertProject(userId, { id: 'from-nico', name: 'From Nico' })
         return // snapshot will re-fire with the new project
       }
 
