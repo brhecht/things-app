@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import useStore from '../store'
 
 const PRIORITY_BORDER = {
@@ -8,6 +9,7 @@ const PRIORITY_BORDER = {
 
 export default function TaskCard({ task, onClick }) {
   const { updateTask, deleteTask } = useStore()
+  const [showTooltip, setShowTooltip] = useState(false)
 
   const handleCheck = (e) => {
     e.stopPropagation()
@@ -17,7 +19,6 @@ export default function TaskCard({ task, onClick }) {
   const handleStar = (e) => {
     e.stopPropagation()
     if (!task.starred) {
-      // Starring: set sortWeight so it keeps priority even after unstarring
       updateTask(task.id, { starred: true, sortWeight: Date.now(), priority: 'high' })
     } else {
       updateTask(task.id, { starred: false })
@@ -34,18 +35,26 @@ export default function TaskCard({ task, onClick }) {
   return (
     <div
       draggable
-      onDragStart={(e) => { e.dataTransfer.setData('taskId', task.id); e.currentTarget.style.opacity = '0.4' }}
+      onDragStart={(e) => { setShowTooltip(false); e.dataTransfer.setData('taskId', task.id); e.currentTarget.style.opacity = '0.4' }}
       onDragEnd={(e) => { e.currentTarget.style.opacity = '1' }}
       onClick={onClick}
-      title={task.title}
-      className={`group bg-white rounded-xl border border-gray-100 p-3 cursor-pointer hover:shadow-md hover:border-gray-200 transition-all select-none shadow-sm ${borderClass}`}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+      className={`group relative bg-white rounded-xl border border-gray-100 p-3 cursor-pointer hover:shadow-md hover:border-gray-200 transition-all select-none shadow-sm ${borderClass}`}
     >
+      {/* Tooltip */}
+      {showTooltip && (
+        <div className="absolute left-0 right-0 -top-1 -translate-y-full z-50 pointer-events-none px-1">
+          <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg leading-relaxed break-words">
+            {task.title}
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-2.5">
         {/* Complete */}
         <button
           onClick={handleCheck}
           className="mt-0.5 w-4 h-4 rounded-full border-2 border-gray-300 flex-shrink-0 hover:border-blue-500 hover:bg-blue-50 transition-colors"
-          title="Mark complete"
         />
 
         {/* Title */}
@@ -55,7 +64,6 @@ export default function TaskCard({ task, onClick }) {
         <button
           onClick={handleStar}
           className={`flex-shrink-0 text-base leading-none transition-colors ${task.starred ? 'text-yellow-400' : 'text-gray-200 hover:text-gray-400'}`}
-          title={task.starred ? 'Unstar' : 'Star'}
         >
           {task.starred ? '★' : '☆'}
         </button>
@@ -64,7 +72,6 @@ export default function TaskCard({ task, onClick }) {
         <button
           onClick={handleDelete}
           className="flex-shrink-0 text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all text-base leading-none"
-          title="Delete task"
         >
           ×
         </button>

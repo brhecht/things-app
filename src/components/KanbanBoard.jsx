@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import useStore from '../store'
 import TaskCard from './TaskCard'
 import TaskModal from './TaskModal'
@@ -51,7 +51,7 @@ function ProjectDropGroup({ proj, bucket, children }) {
   )
 }
 
-function Column({ bucket, tasks, projects, onTaskClick, width }) {
+function Column({ bucket, tasks, projects, onTaskClick }) {
   const { addTask, moveTask, selectedProjectId } = useStore()
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -89,7 +89,7 @@ function Column({ bucket, tasks, projects, onTaskClick, width }) {
     .filter(({ tasks }) => tasks.length > 0)
 
   return (
-    <div className="flex flex-col min-w-[180px]" style={{ width: width || undefined, flexShrink: 0, flexGrow: width ? 0 : 1 }}>
+    <div className="flex-1 flex flex-col min-w-0">
       {/* Column header */}
       <div className={`flex items-center justify-between mb-4 pb-3 border-b-2 ${bucket.border}`}>
         <h2 className={`font-semibold text-sm uppercase tracking-widest ${bucket.accent}`}>{bucket.label}</h2>
@@ -159,12 +159,36 @@ function Column({ bucket, tasks, projects, onTaskClick, width }) {
   )
 }
 
-function ResizeHandle({ onResize }) {
+function ResizeHandle({ bucketId, nextBucketId, colWidths, setColWidths }) {
+  const handleRef = useRef(null)
+
   const handleMouseDown = (e) => {
     e.preventDefault()
     const startX = e.clientX
-    const onMouseMove = (e) => onResize(e.clientX - startX)
-    const onMouseUp = () => { document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); document.body.style.cursor = ''; document.body.style.userSelect = '' }
+    // Measure actual rendered widths of the two adjacent column wrappers
+    const handleEl = handleRef.current
+    const prevCol = handleEl.closest('[data-col-wrapper]').previousElementSibling
+    const nextCol = handleEl.closest('[data-col-wrapper]')
+    // The prev column is actually the prior sibling div[data-col-wrapper]
+    // But our structure: each bucket is a div wrapper. The handle is inside the *next* bucket's wrapper.
+    // So: prevCol's parent = nextCol's parent, prevCol is the previous sibling.
+    const prevWrapper = nextCol.previousElementSibling
+    if (!prevWrapper) return
+    const startPrevWidth = prevWrapper.getBoundingClientRect().width
+    const startNextWidth = nextCol.getBoundingClientRect().width
+
+    const onMouseMove = (e) => {
+      const delta = e.clientX - startX
+      const newPrev = Math.max(180, startPrevWidth + delta)
+      const newNext = Math.max(180, startNextWidth - delta)
+      setColWidths((prev) => ({ ...prev, [bucketId]: newPrev, [nextBucketId]: newNext }))
+    }
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
     document.body.style.cursor = 'col-resize'
     document.body.style.userSelect = 'none'
     document.addEventListener('mousemove', onMouseMove)
@@ -173,6 +197,7 @@ function ResizeHandle({ onResize }) {
 
   return (
     <div
+      ref={handleRef}
       onMouseDown={handleMouseDown}
       className="w-2 flex-shrink-0 cursor-col-resize group flex items-stretch justify-center"
     >
@@ -185,21 +210,6 @@ export default function KanbanBoard({ filters }) {
   const { tasks, projects, selectedProjectId } = useStore()
   const [selectedTask, setSelectedTask] = useState(null)
   const [colWidths, setColWidths] = useState({})
-  const widthRef = useRef({})
-
-  const makeResizeHandler = useCallback((bucketId, nextBucketId) => {
-    return (delta) => {
-      setColWidths((prev) => {
-        const cur = prev[bucketId] || 220
-        const curNext = prev[nextBucketId] || 220
-        const newWidth = Math.max(140, cur + delta)
-        const newNextWidth = Math.max(140, curNext - delta)
-        const result = { ...prev, [bucketId]: newWidth, [nextBucketId]: newNextWidth }
-        widthRef.current = result
-        return result
-      })
-    }
-  }, [])
 
   // Base visibility: project filter + not completed
   let visibleTasks = selectedProjectId
@@ -230,16 +240,15 @@ export default function KanbanBoard({ filters }) {
       <div className="flex-1 overflow-auto p-8">
         <div className="flex min-h-full">
           {BUCKETS.map((bucket, i) => (
-            <div key={bucket.id} className="flex" style={{ flexShrink: 0 }}>
+            <div key={bucket.id} data-col-wrapper className="flex" style={{ flex: colWidths[bucket.id] ? `0 0 ${colWidths[bucket.id]}px` : '1 1 0%', minWidth: 180 }}>
               {i > 0 && (
-                <ResizeHandle onResize={makeResizeHandler(BUCKETS[i - 1].id, bucket.id)} />
+                <ResizeHandle bucketId={BUCKETS[i - 1].id} nextBucketId={bucket.id} colWidths={colWidths} setColWidths={setColWidths} />
               )}
               <Column
                 bucket={bucket}
                 tasks={visibleTasks.filter((t) => t.bucket === bucket.id)}
                 projects={projects}
                 onTaskClick={setSelectedTask}
-                width={colWidths[bucket.id]}
               />
             </div>
           ))}
