@@ -4,21 +4,6 @@ import { getFirestore } from 'firebase-admin/firestore'
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN
 const OWNER_SLACK_ID = process.env.OWNER_SLACK_ID  // Brian's Slack user ID
 
-// Project name → id mapping
-const PROJECT_MAP = {
-  'humble admin':      'hc-admin',
-  'hc admin':          'hc-admin',
-  'hc content':        'hc-content',
-  'hc revenue':        'hc-revenue',
-  'portfolio':         'portfolio',
-  'life admin':        'life-admin',
-  'personal finance':  'personal-finance',
-  'network':           'network',
-  'georgetown':        'georgetown',
-  'friends':           'friends',
-  'misc':              'misc',
-}
-
 function getDb() {
   if (!getApps().length) {
     initializeApp({
@@ -32,6 +17,8 @@ function getDb() {
 const BUCKET_MAP = {
   'inbox':     'inbox',
   'today':     'today',
+  'waiting':   'waiting',
+  'delegated': 'waiting',
   'tomorrow':  'tomorrow',
   'this week': 'soon',
   'week':      'soon',
@@ -40,30 +27,49 @@ const BUCKET_MAP = {
   'someday':   'someday',
 }
 
-// Parse a message like "Call accountant #personal finance #today" into { title, projectId, bucket }
-function parseMessage(text) {
+// Fetch all projects from Firestore and build a name → id lookup
+// Matches on lowercase project name (e.g. "ai builds" → the project with name "AI Builds")
+async function getProjectMap(db, ownerUid) {
+  const snap = await db.collection('users').doc(ownerUid).collection('projects').get()
+  const map = {}
+  snap.forEach((d) => {
+    const proj = d.data()
+    const name = (proj.name || '').toLowerCase().trim()
+    if (name) map[name] = d.id
+  })
+  return map
+}
+
+// Parse a message like "Call accountant --personal finance --today" into { title, tags }
+function parseTags(text) {
   let cleaned = text.replace(/<@[A-Z0-9]+>/g, '').trim()
 
-  let projectId = null
-  let bucket = 'inbox'
-
-  // Extract all #tags
   const tags = []
-  cleaned = cleaned.replace(/#([^#]+?)(?=#|$)/g, (_, tag) => {
+  cleaned = cleaned.replace(/--([^-]+?)(?=--|$)/g, (_, tag) => {
     tags.push(tag.trim().toLowerCase())
     return ''
   }).trim()
 
-  // Match tags to projects or buckets
+  // Clean leftover dashes from fast typing
+  cleaned = cleaned.replace(/^-+|--+$/g, '').trim()
+
+  return { title: cleaned, tags }
+}
+
+// Resolve tags against bucket map and dynamic project map
+function resolveTags(tags, projectMap) {
+  let projectId = null
+  let bucket = 'inbox'
+
   for (const tag of tags) {
     if (BUCKET_MAP[tag]) {
       bucket = BUCKET_MAP[tag]
-    } else if (PROJECT_MAP[tag]) {
-      projectId = PROJECT_MAP[tag]
+    } else if (projectMap[tag]) {
+      projectId = projectMap[tag]
     }
   }
 
-  return { title: cleaned, projectId, bucket }
+  return { projectId, bucket }
 }
 
 async function slackReply(channel, text) {
@@ -95,17 +101,26 @@ export default async function handler(req, res) {
       const event = body.event
 
       if (event.type === 'message' && !event.bot_id && !event.subtype) {
-        const { title, projectId, bucket } = parseMessage(event.text || '')
+        const { title, tags } = parseTags(event.text || '')
 
         if (!title) {
           await slackReply(event.channel, "I couldn't parse a task from that. Just send me the task title!")
           return res.status(200).json({ ok: true })
         }
 
-        // If sender is not the owner, auto-assign to "From Nico" project
-        // If no project specified, default to "unassigned"
+        const db = getDb()
+        const OWNER_UID = process.env.OWNER_UID
+
+        // Dynamically fetch projects from Firestore
+        const projectMap = await getProjectMap(db, OWNER_UID)
+        const { projectId, bucket } = resolveTags(tags, projectMap)
+
+        // If sender is not the owner, auto-assign to "From Nico" project (find it by name)
+        // If no project specified, default to "unassigned" (find it by name)
         const isOwner = event.user === OWNER_SLACK_ID
-        const finalProjectId = (!isOwner && !projectId) ? 'from-nico' : (projectId || 'unassigned')
+        const fromNicoId = projectMap['from nico'] || 'from-nico'
+        const unassignedId = projectMap['unassigned'] || 'unassigned'
+        const finalProjectId = (!isOwner && !projectId) ? fromNicoId : (projectId || unassignedId)
 
         const taskId = `slack-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
         const task = {
@@ -122,15 +137,12 @@ export default async function handler(req, res) {
           createdAt: Date.now(),
         }
 
-        const db = getDb()
-        const OWNER_UID = process.env.OWNER_UID
         await db.collection('users').doc(OWNER_UID).collection('tasks').doc(taskId).set(task)
 
-        const projectLabel = finalProjectId
-          ? ` \u2192 ${finalProjectId === 'from-nico' ? 'From Nico' : (Object.entries(PROJECT_MAP).find(([, v]) => v === finalProjectId)?.[0] || finalProjectId)}`
-          : ''
+        // Reverse-lookup project name for the confirmation message
+        const projectName = Object.entries(projectMap).find(([, id]) => id === finalProjectId)?.[0] || finalProjectId
         const bucketLabel = bucket !== 'inbox' ? ` [${Object.entries(BUCKET_MAP).find(([, v]) => v === bucket)?.[0] || bucket}]` : ''
-        await slackReply(event.channel, `\u2705 Added${bucketLabel || ' to Inbox'}: "${title}"${projectLabel}`)
+        await slackReply(event.channel, `\u2705 Added${bucketLabel || ' to Inbox'}: "${title}" \u2192 ${projectName}`)
       }
 
       return res.status(200).json({ ok: true })
