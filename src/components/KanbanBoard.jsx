@@ -26,14 +26,14 @@ const PROJECT_COLORS = {
   'unassigned':       'bg-stone-100 text-stone-600',
 }
 
-function ProjectDropHeader({ proj, bucket, isDragging }) {
+function ProjectDropGroup({ proj, bucket, children }) {
   const { updateTask } = useStore()
   const [isOver, setIsOver] = useState(false)
 
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsOver(true) }}
-      onDragLeave={() => setIsOver(false)}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsOver(false) }}
       onDrop={(e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -41,18 +41,17 @@ function ProjectDropHeader({ proj, bucket, isDragging }) {
         const id = e.dataTransfer.getData('taskId')
         if (id) updateTask(id, { projectId: proj.id, bucket: bucket.id })
       }}
-      className={`text-xs font-semibold uppercase tracking-wider px-3 py-1.5 rounded-md mb-2 transition-all ${
-        isOver
-          ? 'ring-2 ring-blue-400 ring-offset-1 scale-[1.02]'
-          : isDragging ? 'ring-1 ring-dashed ring-gray-300' : ''
-      } ${PROJECT_COLORS[proj.id] || 'bg-gray-100 text-gray-600'}`}
+      className={`rounded-lg transition-all ${isOver ? 'ring-2 ring-blue-400 ring-offset-1 bg-blue-50/30' : ''}`}
     >
-      {proj.name}
+      <div className={`text-xs font-semibold uppercase tracking-wider px-3 py-1.5 rounded-md mb-2 ${PROJECT_COLORS[proj.id] || 'bg-gray-100 text-gray-600'}`}>
+        {proj.name}
+      </div>
+      {children}
     </div>
   )
 }
 
-function Column({ bucket, tasks, projects, onTaskClick, isDragging }) {
+function Column({ bucket, tasks, projects, onTaskClick }) {
   const { addTask, moveTask, selectedProjectId } = useStore()
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -89,11 +88,6 @@ function Column({ bucket, tasks, projects, onTaskClick, isDragging }) {
     }))
     .filter(({ tasks }) => tasks.length > 0)
 
-  // Projects that have no tasks in this column (shown as drop targets during drag)
-  const emptyProjects = isDragging
-    ? projects.filter((proj) => !grouped.find((g) => g.proj.id === proj.id))
-    : []
-
   return (
     <div className="flex-1 flex flex-col min-w-[220px]">
       {/* Column header */}
@@ -118,27 +112,16 @@ function Column({ bucket, tasks, projects, onTaskClick, isDragging }) {
           </div>
         )}
 
-        {/* Project groups */}
+        {/* Project groups — entire region is a drop target */}
         {grouped.map(({ proj, tasks: projTasks }) => (
-          <div key={proj.id}>
-            <ProjectDropHeader proj={proj} bucket={bucket} isDragging={isDragging} />
+          <ProjectDropGroup key={proj.id} proj={proj} bucket={bucket}>
             <div className="space-y-2">
               {projTasks.map((task) => (
                 <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
               ))}
             </div>
-          </div>
+          </ProjectDropGroup>
         ))}
-
-        {/* Empty project drop targets — only visible during drag */}
-        {emptyProjects.length > 0 && (
-          <div className="space-y-1.5 pt-2 border-t border-dashed border-gray-200">
-            <span className="text-[10px] text-gray-400 uppercase tracking-wider px-1">Move to project</span>
-            {emptyProjects.map((proj) => (
-              <ProjectDropHeader key={proj.id} proj={proj} bucket={bucket} isDragging={isDragging} />
-            ))}
-          </div>
-        )}
 
         {/* Add task */}
         {adding ? (
@@ -179,8 +162,6 @@ function Column({ bucket, tasks, projects, onTaskClick, isDragging }) {
 export default function KanbanBoard({ filters }) {
   const { tasks, projects, selectedProjectId } = useStore()
   const [selectedTask, setSelectedTask] = useState(null)
-  const [isDragging, setIsDragging] = useState(false)
-
   // Base visibility: project filter + not completed
   let visibleTasks = selectedProjectId
     ? tasks.filter((t) => t.projectId === selectedProjectId && !t.completed)
@@ -207,11 +188,7 @@ export default function KanbanBoard({ filters }) {
       </div>
 
       {/* Board */}
-      <div
-        className="flex-1 overflow-auto p-8"
-        onDragStart={() => setIsDragging(true)}
-        onDragEnd={() => setIsDragging(false)}
-      >
+      <div className="flex-1 overflow-auto p-8">
         <div className="flex gap-8 min-h-full">
           {BUCKETS.map((bucket) => (
             <Column
@@ -220,7 +197,6 @@ export default function KanbanBoard({ filters }) {
               tasks={visibleTasks.filter((t) => t.bucket === bucket.id)}
               projects={projects}
               onTaskClick={setSelectedTask}
-              isDragging={isDragging}
             />
           ))}
         </div>
