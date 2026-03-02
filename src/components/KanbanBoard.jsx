@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import useStore from '../store'
 import TaskCard from './TaskCard'
 import TaskModal from './TaskModal'
@@ -51,7 +51,7 @@ function ProjectDropGroup({ proj, bucket, children }) {
   )
 }
 
-function Column({ bucket, tasks, projects, onTaskClick }) {
+function Column({ bucket, tasks, projects, onTaskClick, width }) {
   const { addTask, moveTask, selectedProjectId } = useStore()
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -89,7 +89,7 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
     .filter(({ tasks }) => tasks.length > 0)
 
   return (
-    <div className="flex-1 flex flex-col min-w-[220px]">
+    <div className="flex flex-col min-w-[180px]" style={{ width: width || undefined, flexShrink: 0, flexGrow: width ? 0 : 1 }}>
       {/* Column header */}
       <div className={`flex items-center justify-between mb-4 pb-3 border-b-2 ${bucket.border}`}>
         <h2 className={`font-semibold text-sm uppercase tracking-widest ${bucket.accent}`}>{bucket.label}</h2>
@@ -159,9 +159,48 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
   )
 }
 
+function ResizeHandle({ onResize }) {
+  const handleMouseDown = (e) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const onMouseMove = (e) => onResize(e.clientX - startX)
+    const onMouseUp = () => { document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); document.body.style.cursor = ''; document.body.style.userSelect = '' }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      className="w-2 flex-shrink-0 cursor-col-resize group flex items-stretch justify-center"
+    >
+      <div className="w-0.5 bg-transparent group-hover:bg-blue-300 transition-colors rounded-full" />
+    </div>
+  )
+}
+
 export default function KanbanBoard({ filters }) {
   const { tasks, projects, selectedProjectId } = useStore()
   const [selectedTask, setSelectedTask] = useState(null)
+  const [colWidths, setColWidths] = useState({})
+  const widthRef = useRef({})
+
+  const makeResizeHandler = useCallback((bucketId, nextBucketId) => {
+    return (delta) => {
+      setColWidths((prev) => {
+        const cur = prev[bucketId] || 220
+        const curNext = prev[nextBucketId] || 220
+        const newWidth = Math.max(140, cur + delta)
+        const newNextWidth = Math.max(140, curNext - delta)
+        const result = { ...prev, [bucketId]: newWidth, [nextBucketId]: newNextWidth }
+        widthRef.current = result
+        return result
+      })
+    }
+  }, [])
+
   // Base visibility: project filter + not completed
   let visibleTasks = selectedProjectId
     ? tasks.filter((t) => t.projectId === selectedProjectId && !t.completed)
@@ -189,15 +228,20 @@ export default function KanbanBoard({ filters }) {
 
       {/* Board */}
       <div className="flex-1 overflow-auto p-8">
-        <div className="flex gap-8 min-h-full">
-          {BUCKETS.map((bucket) => (
-            <Column
-              key={bucket.id}
-              bucket={bucket}
-              tasks={visibleTasks.filter((t) => t.bucket === bucket.id)}
-              projects={projects}
-              onTaskClick={setSelectedTask}
-            />
+        <div className="flex min-h-full">
+          {BUCKETS.map((bucket, i) => (
+            <div key={bucket.id} className="flex" style={{ flexShrink: 0 }}>
+              {i > 0 && (
+                <ResizeHandle onResize={makeResizeHandler(BUCKETS[i - 1].id, bucket.id)} />
+              )}
+              <Column
+                bucket={bucket}
+                tasks={visibleTasks.filter((t) => t.bucket === bucket.id)}
+                projects={projects}
+                onTaskClick={setSelectedTask}
+                width={colWidths[bucket.id]}
+              />
+            </div>
           ))}
         </div>
       </div>

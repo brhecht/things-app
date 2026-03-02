@@ -37,6 +37,7 @@ export default function TaskCard({ task, onClick }) {
       onDragStart={(e) => { e.dataTransfer.setData('taskId', task.id); e.currentTarget.style.opacity = '0.4' }}
       onDragEnd={(e) => { e.currentTarget.style.opacity = '1' }}
       onClick={onClick}
+      title={task.title}
       className={`group bg-white rounded-xl border border-gray-100 p-3 cursor-pointer hover:shadow-md hover:border-gray-200 transition-all select-none shadow-sm ${borderClass}`}
     >
       <div className="flex items-center gap-2.5">
