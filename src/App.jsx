@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar'
 import KanbanBoard from './components/KanbanBoard'
 import AgendaView from './components/AgendaView'
 import SignInPage from './components/SignInPage'
+import AppSwitcher from './AppSwitcher'
 
 export default function App() {
   const { user, authLoading, isViewer, initAuth } = useStore()
@@ -34,7 +35,9 @@ export default function App() {
 
   // Signed in → show the app
   return (
-    <div className="flex h-screen overflow-hidden bg-white font-sans antialiased">
+    <div className="flex flex-col h-screen overflow-hidden bg-white font-sans antialiased">
+      <AppSwitcher current="things" />
+      <div className="flex flex-1 overflow-hidden">
       <Sidebar filters={filters} setFilters={setFilters} />
       <main className="flex-1 overflow-hidden flex flex-col">
         {isViewer && (
@@ -69,6 +72,7 @@ export default function App() {
           )}
         </div>
       </main>
+      </div>
     </div>
   )
 }
