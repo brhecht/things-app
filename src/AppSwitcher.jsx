@@ -52,7 +52,7 @@ const pillBase = {
 export default function AppSwitcher({ current }) {
   return (
     <nav style={BAR_STYLE}>
-      <div style={LOGO_STYLE}>B</div>
+      <a href="https://b-hub-liard.vercel.app/" style={{ ...LOGO_STYLE, textDecoration: 'none' }}>B</a>
       {APPS.map((app) => {
         const isActive = app.key === current
         const style = isActive
