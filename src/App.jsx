@@ -10,6 +10,7 @@ export default function App() {
   const { user, authLoading, isViewer, initAuth } = useStore()
   const [filters, setFilters] = useState({ starred: false, priorities: [] })
   const [view, setView] = useState('kanban') // 'kanban' or 'agenda'
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   // Start listening to auth state once on mount
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function App() {
     <div className="flex flex-col h-screen overflow-hidden bg-white font-sans antialiased">
       <AppSwitcher current="things" />
       <div className="flex flex-1 overflow-hidden">
-      <Sidebar filters={filters} setFilters={setFilters} />
+      <Sidebar filters={filters} setFilters={setFilters} isOpen={sidebarOpen} onToggle={() => setSidebarOpen(o => !o)} />
       <main className="flex-1 overflow-hidden flex flex-col">
         {isViewer && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-700 text-center">

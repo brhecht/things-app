@@ -6,6 +6,7 @@ import TaskModal from './TaskModal'
 const BUCKETS = [
   { id: 'inbox',    label: 'Inbox',    accent: 'text-orange-600', border: 'border-orange-200', dropBg: 'bg-orange-50', count: 'bg-orange-100 text-orange-700' },
   { id: 'today',    label: 'Today',    accent: 'text-blue-600',   border: 'border-blue-200',   dropBg: 'bg-blue-50',   count: 'bg-blue-100 text-blue-700' },
+  { id: 'waiting',  label: 'Waiting / Delegated', accent: 'text-amber-600', border: 'border-amber-200', dropBg: 'bg-amber-50', count: 'bg-amber-100 text-amber-700' },
   { id: 'tomorrow', label: 'Tomorrow', accent: 'text-indigo-600', border: 'border-indigo-200', dropBg: 'bg-indigo-50', count: 'bg-indigo-100 text-indigo-700' },
   { id: 'soon',     label: 'This Week',     accent: 'text-violet-600', border: 'border-violet-200', dropBg: 'bg-violet-50', count: 'bg-violet-100 text-violet-700' },
   { id: 'someday',  label: 'Later',  accent: 'text-gray-500',   border: 'border-gray-200',   dropBg: 'bg-gray-100',  count: 'bg-gray-100 text-gray-500' },
@@ -25,7 +26,33 @@ const PROJECT_COLORS = {
   'unassigned':       'bg-stone-100 text-stone-600',
 }
 
-function Column({ bucket, tasks, projects, onTaskClick }) {
+function ProjectDropHeader({ proj, bucket, isDragging }) {
+  const { updateTask } = useStore()
+  const [isOver, setIsOver] = useState(false)
+
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsOver(true) }}
+      onDragLeave={() => setIsOver(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsOver(false)
+        const id = e.dataTransfer.getData('taskId')
+        if (id) updateTask(id, { projectId: proj.id, bucket: bucket.id })
+      }}
+      className={`text-xs font-semibold uppercase tracking-wider px-3 py-1.5 rounded-md mb-2 transition-all ${
+        isOver
+          ? 'ring-2 ring-blue-400 ring-offset-1 scale-[1.02]'
+          : isDragging ? 'ring-1 ring-dashed ring-gray-300' : ''
+      } ${PROJECT_COLORS[proj.id] || 'bg-gray-100 text-gray-600'}`}
+    >
+      {proj.name}
+    </div>
+  )
+}
+
+function Column({ bucket, tasks, projects, onTaskClick, isDragging }) {
   const { addTask, moveTask, selectedProjectId } = useStore()
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -62,6 +89,11 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
     }))
     .filter(({ tasks }) => tasks.length > 0)
 
+  // Projects that have no tasks in this column (shown as drop targets during drag)
+  const emptyProjects = isDragging
+    ? projects.filter((proj) => !grouped.find((g) => g.proj.id === proj.id))
+    : []
+
   return (
     <div className="flex-1 flex flex-col min-w-[220px]">
       {/* Column header */}
@@ -89,9 +121,7 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
         {/* Project groups */}
         {grouped.map(({ proj, tasks: projTasks }) => (
           <div key={proj.id}>
-            <div className={`text-xs font-semibold uppercase tracking-wider px-3 py-1.5 rounded-md mb-2 ${PROJECT_COLORS[proj.id] || 'bg-gray-100 text-gray-600'}`}>
-              {proj.name}
-            </div>
+            <ProjectDropHeader proj={proj} bucket={bucket} isDragging={isDragging} />
             <div className="space-y-2">
               {projTasks.map((task) => (
                 <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
@@ -99,6 +129,16 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
             </div>
           </div>
         ))}
+
+        {/* Empty project drop targets — only visible during drag */}
+        {emptyProjects.length > 0 && (
+          <div className="space-y-1.5 pt-2 border-t border-dashed border-gray-200">
+            <span className="text-[10px] text-gray-400 uppercase tracking-wider px-1">Move to project</span>
+            {emptyProjects.map((proj) => (
+              <ProjectDropHeader key={proj.id} proj={proj} bucket={bucket} isDragging={isDragging} />
+            ))}
+          </div>
+        )}
 
         {/* Add task */}
         {adding ? (
@@ -139,6 +179,7 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
 export default function KanbanBoard({ filters }) {
   const { tasks, projects, selectedProjectId } = useStore()
   const [selectedTask, setSelectedTask] = useState(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   // Base visibility: project filter + not completed
   let visibleTasks = selectedProjectId
@@ -166,7 +207,11 @@ export default function KanbanBoard({ filters }) {
       </div>
 
       {/* Board */}
-      <div className="flex-1 overflow-auto p-8">
+      <div
+        className="flex-1 overflow-auto p-8"
+        onDragStart={() => setIsDragging(true)}
+        onDragEnd={() => setIsDragging(false)}
+      >
         <div className="flex gap-8 min-h-full">
           {BUCKETS.map((bucket) => (
             <Column
@@ -175,6 +220,7 @@ export default function KanbanBoard({ filters }) {
               tasks={visibleTasks.filter((t) => t.bucket === bucket.id)}
               projects={projects}
               onTaskClick={setSelectedTask}
+              isDragging={isDragging}
             />
           ))}
         </div>

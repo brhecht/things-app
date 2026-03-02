@@ -24,8 +24,8 @@ const ALLOWED_VIEWERS = ['nico@humbleconviction.com']
 let counter = 1
 const uid = () => `id-${Date.now()}-${counter++}`
 
-// Fixed display order for projects (sidebar + kanban lanes)
-const PROJECT_ORDER = [
+// Fallback display order for projects that don't have a sortOrder yet
+const LEGACY_ORDER = [
   'hc-admin', 'hc-content', 'hc-revenue', 'portfolio',
   'life-admin', 'personal-finance', 'network', 'georgetown', 'friends',
   'from-nico', 'unassigned',
@@ -33,16 +33,16 @@ const PROJECT_ORDER = [
 
 // Default projects for brand-new users (first sign-in)
 const SEED_PROJECTS = [
-  { id: 'hc-admin',         name: 'Humble Admin' },
-  { id: 'hc-content',       name: 'HC Content' },
-  { id: 'hc-revenue',       name: 'HC Revenue' },
-  { id: 'portfolio',        name: 'Portfolio' },
-  { id: 'life-admin',       name: 'Life Admin' },
-  { id: 'personal-finance', name: 'Personal Finance' },
-  { id: 'network',          name: 'Network' },
-  { id: 'georgetown',       name: 'Georgetown' },
-  { id: 'friends',          name: 'Friends' },
-  { id: 'misc',             name: 'Misc' },
+  { id: 'hc-admin',         name: 'Humble Admin',      sortOrder: 0 },
+  { id: 'hc-content',       name: 'HC Content',        sortOrder: 1 },
+  { id: 'hc-revenue',       name: 'HC Revenue',        sortOrder: 2 },
+  { id: 'portfolio',        name: 'Portfolio',          sortOrder: 3 },
+  { id: 'life-admin',       name: 'Life Admin',        sortOrder: 4 },
+  { id: 'personal-finance', name: 'Personal Finance',  sortOrder: 5 },
+  { id: 'network',          name: 'Network',           sortOrder: 6 },
+  { id: 'georgetown',       name: 'Georgetown',        sortOrder: 7 },
+  { id: 'friends',          name: 'Friends',            sortOrder: 8 },
+  { id: 'misc',             name: 'Misc',              sortOrder: 9 },
 ]
 
 const SEED_TASKS = [
@@ -156,11 +156,11 @@ const useStore = create((set, get) => ({
         return // snapshot will re-fire with the new project
       }
 
-      // Sort projects by fixed display order
+      // Sort projects by sortOrder (falling back to legacy order for projects without one)
       projects.sort((a, b) => {
-        const ai = PROJECT_ORDER.indexOf(a.id)
-        const bi = PROJECT_ORDER.indexOf(b.id)
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+        const ao = a.sortOrder != null ? a.sortOrder : (LEGACY_ORDER.indexOf(a.id) !== -1 ? LEGACY_ORDER.indexOf(a.id) : 999)
+        const bo = b.sortOrder != null ? b.sortOrder : (LEGACY_ORDER.indexOf(b.id) !== -1 ? LEGACY_ORDER.indexOf(b.id) : 999)
+        return ao - bo
       })
       set({ projects })
     })
@@ -243,6 +243,20 @@ const useStore = create((set, get) => ({
     if (!user || isViewer) return
     const existing = tasks.find((t) => t.id === id)
     if (existing) upsertTask(user.uid, { ...existing, bucket })
+  },
+
+  reorderProjects: (fromIndex, toIndex) => {
+    const { user, isViewer, projects } = get()
+    if (!user || isViewer) return
+    const reordered = [...projects]
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, moved)
+    // Assign new sortOrder values and persist each
+    reordered.forEach((proj, i) => {
+      upsertProject(user.uid, { ...proj, sortOrder: i })
+    })
+    // Optimistically update local state
+    set({ projects: reordered })
   },
 
   // ── UI ────────────────────────────────────────────────────────

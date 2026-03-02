@@ -51,9 +51,11 @@ function InlineInput({ placeholder, onSubmit, onCancel }) {
   )
 }
 
-export default function Sidebar({ filters, setFilters }) {
-  const { user, signOut, projects, selectedProjectId, setSelectedProject, addProject } = useStore()
+export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
+  const { user, signOut, projects, selectedProjectId, setSelectedProject, addProject, reorderProjects } = useStore()
   const [addingProject, setAddingProject] = useState(false)
+  const [dragIdx, setDragIdx] = useState(null)
+  const [dropIdx, setDropIdx] = useState(null)
 
   const hasActiveFilters = filters.starred || filters.priorities.length > 0
 
@@ -68,7 +70,35 @@ export default function Sidebar({ filters, setFilters }) {
   const clearFilters = () => setFilters({ starred: false, priorities: [] })
 
   return (
-    <aside className="w-60 bg-gray-900 flex flex-col h-full border-r border-gray-800 select-none">
+    <aside className={`bg-gray-900 flex flex-col h-full border-r border-gray-800 select-none transition-all duration-200 ${isOpen ? 'w-60' : 'w-10'} flex-shrink-0`}>
+      {/* Toggle button */}
+      <button
+        onClick={onToggle}
+        className="flex items-center justify-center w-full h-8 text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors flex-shrink-0"
+        title={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? '' : 'rotate-180'}`}>
+          <path fillRule="evenodd" d="M9.78 4.22a.75.75 0 0 1 0 1.06L7.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L5.47 8.53a.75.75 0 0 1 0-1.06l3.25-3.25a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" />
+        </svg>
+      </button>
+      {!isOpen && (
+        <div className="flex flex-col items-center gap-1 mt-2 px-1">
+          {/* Collapsed: show project dots for quick visual reference */}
+          {projects.map((proj) => (
+            <button
+              key={proj.id}
+              onClick={() => setSelectedProject(proj.id)}
+              className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
+                selectedProjectId === proj.id ? 'bg-blue-600' : 'hover:bg-gray-700/60'
+              }`}
+              title={proj.name}
+            >
+              <span className={`w-2 h-2 rounded-full ${DOT_COLORS[proj.id] || 'bg-gray-400'}`} />
+            </button>
+          ))}
+        </div>
+      )}
+      <div className={`flex-1 flex flex-col overflow-hidden ${isOpen ? '' : 'hidden'}`}>
       {/* Logo + user */}
       <div className="px-5 py-5">
         <div className="flex items-center gap-2.5">
@@ -98,18 +128,33 @@ export default function Sidebar({ filters, setFilters }) {
           <span>All Tasks</span>
         </button>
 
-        {/* Projects */}
-        {projects.map((proj) => (
-          <button
+        {/* Projects (draggable to reorder) */}
+        {projects.map((proj, idx) => (
+          <div
             key={proj.id}
-            onClick={() => setSelectedProject(proj.id)}
-            className={`w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-              selectedProjectId === proj.id ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700/60'
-            }`}
+            draggable
+            onDragStart={(e) => { setDragIdx(idx); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', '') }}
+            onDragEnd={() => { if (dragIdx != null && dropIdx != null && dragIdx !== dropIdx) reorderProjects(dragIdx, dropIdx); setDragIdx(null); setDropIdx(null) }}
+            onDragOver={(e) => { e.preventDefault(); setDropIdx(idx) }}
+            className="relative"
           >
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${DOT_COLORS[proj.id] || 'bg-gray-400'}`} />
-            <span className="truncate">{proj.name}</span>
-          </button>
+            {/* Drop indicator line */}
+            {dragIdx != null && dropIdx === idx && dropIdx !== dragIdx && (
+              <div className={`absolute left-3 right-3 h-0.5 bg-blue-400 rounded-full ${dropIdx < dragIdx ? '-top-0.5' : '-bottom-0.5'}`} />
+            )}
+            <button
+              onClick={() => setSelectedProject(proj.id)}
+              className={`w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                dragIdx === idx ? 'opacity-40' : ''
+              } ${
+                selectedProjectId === proj.id ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700/60'
+              }`}
+            >
+              <span className="text-gray-600 cursor-grab text-[10px] leading-none mr-0.5">⠿</span>
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${DOT_COLORS[proj.id] || 'bg-gray-400'}`} />
+              <span className="truncate">{proj.name}</span>
+            </button>
+          </div>
         ))}
 
         {/* Add project */}
@@ -177,6 +222,7 @@ export default function Sidebar({ filters, setFilters }) {
           })}
         </div>
       </nav>
+      </div>
     </aside>
   )
 }
