@@ -71,14 +71,17 @@ export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
 
   return (
     <aside className={`bg-gray-900 flex flex-col h-full border-r border-gray-800 select-none transition-all duration-200 ${isOpen ? 'w-60' : 'w-10'} flex-shrink-0`}>
-      {/* Toggle button */}
+      {/* Toggle button — standard sidebar panel icon */}
       <button
         onClick={onToggle}
-        className="flex items-center justify-center w-full h-8 text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors flex-shrink-0"
+        className="flex items-center justify-center w-full h-10 text-gray-500 hover:text-gray-200 hover:bg-gray-800 transition-colors flex-shrink-0"
         title={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
       >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? '' : 'rotate-180'}`}>
-          <path fillRule="evenodd" d="M9.78 4.22a.75.75 0 0 1 0 1.06L7.06 8l2.72 2.72a.75.75 0 1 1-1.06 1.06L5.47 8.53a.75.75 0 0 1 0-1.06l3.25-3.25a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" />
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+          <rect x="3" y="3" width="18" height="18" rx="3" />
+          <line x1="9" y1="3" x2="9" y2="21" />
+          {isOpen && <polyline points="15 10 13 12 15 14" />}
+          {!isOpen && <polyline points="13 10 15 12 13 14" />}
         </svg>
       </button>
       {!isOpen && (

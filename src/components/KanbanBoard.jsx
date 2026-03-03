@@ -147,8 +147,25 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
             >
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <button type="submit" className="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 font-medium">Add</button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (newTitle.trim() && newProjectId) {
+                    const task = addTask(newTitle.trim(), newProjectId, bucket.id)
+                    setNewTitle('')
+                    setAdding(false)
+                    if (task) onTaskClick(task)
+                  }
+                }}
+                className="p-1 text-gray-400 hover:text-blue-600 transition-colors rounded"
+                title="Add & open full editor"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                  <path d="M4 2a.75.75 0 0 0-.75.75v1.5a.75.75 0 0 0 1.5 0V3.5h.75a.75.75 0 0 0 0-1.5H4ZM9.75 2.75A.75.75 0 0 1 10.5 2h1.75a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V3.5h-1a.75.75 0 0 1-.75-.75ZM3.25 9.75A.75.75 0 0 1 4 9h1.5a.75.75 0 0 1 0 1.5H4.75v.75a.75.75 0 0 1-1.5 0V9.75ZM10.5 9a.75.75 0 0 0-.75.75v1.5a.75.75 0 0 0 .75.75h1.75a.75.75 0 0 0 .75-.75v-1.5a.75.75 0 0 0-1.5 0v.75h-1A.75.75 0 0 0 10.5 9Z" />
+                </svg>
+              </button>
               <button type="button" onClick={() => setAdding(false)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
             </div>
           </form>
