@@ -68,6 +68,11 @@ export default function TaskCard({ task, onClick }) {
           {task.starred ? '★' : '☆'}
         </button>
 
+        {/* Notes indicator */}
+        {task.notes && task.notes.trim() && (
+          <span className="flex-shrink-0 w-2 h-2 rounded-full bg-emerald-400" title="Has notes" />
+        )}
+
         {/* Delete — hover only */}
         <button
           onClick={handleDelete}
