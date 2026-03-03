@@ -13,8 +13,8 @@ const BUCKETS = [
   { value: 'today',    label: 'Today' },
   { value: 'waiting',  label: 'Waiting / Delegated' },
   { value: 'tomorrow', label: 'Tomorrow' },
-  { value: 'soon',     label: 'Soon' },
-  { value: 'someday',  label: 'Someday' },
+  { value: 'soon',     label: 'This Week' },
+  { value: 'someday',  label: 'Later' },
 ]
 
 export default function TaskModal({ task, onClose }) {
