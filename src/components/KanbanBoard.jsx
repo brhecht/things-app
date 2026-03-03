@@ -245,10 +245,14 @@ export default function KanbanBoard({ filters }) {
       {/* Board */}
       <div className="flex-1 overflow-auto p-8">
         <div className="flex min-h-full">
-          {BUCKETS.map((bucket, i) => (
+          {BUCKETS.filter((bucket) => {
+            // Hide inbox column when it has no tasks
+            if (bucket.id === 'inbox' && visibleTasks.filter((t) => t.bucket === 'inbox').length === 0) return false
+            return true
+          }).map((bucket, i, arr) => (
             <div key={bucket.id} data-col-wrapper className="flex" style={{ flex: colWidths[bucket.id] ? `0 0 ${colWidths[bucket.id]}px` : '1 1 0%', minWidth: 180 }}>
               {i > 0 && (
-                <ResizeHandle bucketId={BUCKETS[i - 1].id} nextBucketId={bucket.id} colWidths={colWidths} setColWidths={setColWidths} />
+                <ResizeHandle bucketId={arr[i - 1].id} nextBucketId={bucket.id} colWidths={colWidths} setColWidths={setColWidths} />
               )}
               <Column
                 bucket={bucket}
