@@ -56,7 +56,7 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
   const [adding, setAdding] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [newProjectId, setNewProjectId] = useState(selectedProjectId || projects[0]?.id || '')
-  const [isOver, setIsOver] = useState(false)
+  const [headerOver, setHeaderOver] = useState(false)
 
   const handleAdd = (e) => {
     e.preventDefault()
@@ -90,19 +90,25 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      {/* Column header */}
-      <div className={`flex items-center justify-between mb-4 pb-3 border-b-2 ${bucket.border}`}>
+      {/* Column header — drop here to move bucket only (preserve project) */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setHeaderOver(true) }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setHeaderOver(false) }}
+        onDrop={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setHeaderOver(false)
+          const id = e.dataTransfer.getData('taskId')
+          if (id) moveTask(id, bucket.id)
+        }}
+        className={`flex items-center justify-between mb-4 pb-3 border-b-2 ${bucket.border} rounded-t-lg transition-colors ${headerOver ? `${bucket.dropBg} ring-2 ring-offset-1 ring-current ${bucket.accent}` : ''}`}
+      >
         <h2 className={`font-semibold text-sm uppercase tracking-widest ${bucket.accent}`}>{bucket.label}</h2>
         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bucket.count}`}>{tasks.length}</span>
       </div>
 
-      {/* Drop zone */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setIsOver(true) }}
-        onDragLeave={() => setIsOver(false)}
-        onDrop={(e) => { e.preventDefault(); setIsOver(false); const id = e.dataTransfer.getData('taskId'); if (id) moveTask(id, bucket.id) }}
-        className={`flex-1 min-h-[120px] rounded-2xl p-2 -m-2 transition-colors duration-150 space-y-4 ${isOver ? bucket.dropBg : ''}`}
-      >
+      {/* Scrollable task area */}
+      <div className="flex-1 min-h-[120px] rounded-2xl p-2 -m-2 space-y-4">
         {/* Unassigned tasks (no project — typically inbox items) */}
         {unassigned.length > 0 && (
           <div className="space-y-2">
@@ -112,7 +118,7 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
           </div>
         )}
 
-        {/* Project groups — entire region is a drop target */}
+        {/* Project groups — drop on a project group to reassign project */}
         {grouped.map(({ proj, tasks: projTasks }) => (
           <ProjectDropGroup key={proj.id} proj={proj} bucket={bucket}>
             <div className="space-y-2">
