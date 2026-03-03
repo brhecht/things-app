@@ -58,6 +58,8 @@ export default function TaskModal({ task, onClose }) {
     const handler = (e) => {
       if (e.key === 'Escape') handleSave()
       if ((e.metaKey || e.ctrlKey) && e.key === 'Backspace') handleDelete()
+      // ⌘+Enter or Ctrl+Enter saves from anywhere
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleSave() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -86,6 +88,7 @@ export default function TaskModal({ task, onClose }) {
             ref={titleRef}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
             className="w-full text-xl font-semibold text-gray-800 outline-none placeholder-gray-300"
             placeholder="Task title"
           />
@@ -99,6 +102,7 @@ export default function TaskModal({ task, onClose }) {
             <select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
               className="flex-1 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400"
             >
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -111,6 +115,7 @@ export default function TaskModal({ task, onClose }) {
             <select
               value={bucket}
               onChange={(e) => setBucket(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
               className="flex-1 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400"
             >
               {BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
@@ -125,6 +130,7 @@ export default function TaskModal({ task, onClose }) {
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
                 className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400"
               />
               {dueDate && (
@@ -146,7 +152,8 @@ export default function TaskModal({ task, onClose }) {
                 <button
                   key={String(opt.value)}
                   onClick={() => setPriority(opt.value)}
-                  className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
+                  tabIndex={0}
+                  className={`text-xs px-3 py-1.5 rounded-lg border transition-all focus:ring-2 focus:ring-blue-300 focus:ring-offset-1 ${
                     priority === opt.value
                       ? 'bg-gray-800 text-white border-gray-800'
                       : 'text-gray-500 border-gray-200 hover:border-gray-400 bg-white'
@@ -204,14 +211,14 @@ export default function TaskModal({ task, onClose }) {
             <button onClick={handleDelete} className="text-sm text-red-400 hover:text-red-600 transition-colors">
               Delete task
             </button>
-            <span className="text-xs text-gray-300">⌘⌫ to delete</span>
+            <span className="text-xs text-gray-300">⌘⌫</span>
           </div>
           <div className="flex gap-2">
             <button onClick={onClose} className="text-sm text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
               Cancel
             </button>
             <button onClick={handleSave} className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium">
-              Save
+              Save <span className="text-blue-200 text-xs ml-1">↵</span>
             </button>
           </div>
         </div>
