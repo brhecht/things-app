@@ -67,6 +67,10 @@ const useStore = create((set, get) => ({
   tasks: [],
   selectedProjectId: null,
 
+  // ── Undo stack ───────────────────────────────────────────────
+  _undoStack: [],   // [{ type: 'update'|'delete', snapshot: {...} }]
+  _undoToast: null, // string message to show, or null
+
   // ── Internal: Firestore unsubscribers ─────────────────────────
   _unsubTasks: null,
   _unsubProjects: null,
@@ -206,6 +210,31 @@ const useStore = create((set, get) => ({
     if (selectedProjectId === id) set({ selectedProjectId: null })
   },
 
+  // ── Undo helpers ──────────────────────────────────────────────
+  _pushUndo: (type, snapshot, label) => {
+    const stack = [...get()._undoStack, { type, snapshot, label }].slice(-30) // cap at 30
+    set({ _undoStack: stack })
+  },
+
+  undo: () => {
+    const { user, isViewer, _undoStack } = get()
+    if (!user || isViewer || _undoStack.length === 0) return
+    const stack = [..._undoStack]
+    const entry = stack.pop()
+    set({ _undoStack: stack })
+    if (entry.type === 'delete') {
+      // Re-create the deleted task
+      upsertTask(user.uid, entry.snapshot)
+    } else {
+      // Restore previous state
+      upsertTask(user.uid, entry.snapshot)
+    }
+    set({ _undoToast: `Undid: ${entry.label}` })
+    setTimeout(() => set({ _undoToast: null }), 2000)
+  },
+
+  dismissToast: () => set({ _undoToast: null }),
+
   // ── Task actions (disabled for viewers) ────────────────────────
   addTask: (title, projectId, bucket = 'today') => {
     const { user, isViewer } = get()
@@ -229,12 +258,24 @@ const useStore = create((set, get) => ({
     const { user, isViewer, tasks } = get()
     if (!user || isViewer) return
     const existing = tasks.find((t) => t.id === id)
-    if (existing) upsertTask(user.uid, { ...existing, ...updates })
+    if (existing) {
+      // Determine a human-readable label for the undo toast
+      let label = 'edit'
+      if ('completed' in updates) label = updates.completed ? 'complete' : 'uncomplete'
+      else if ('starred' in updates) label = updates.starred ? 'star' : 'unstar'
+      else if ('bucket' in updates && 'projectId' in updates) label = 'move'
+      else if ('bucket' in updates) label = 'move'
+      else if ('projectId' in updates) label = 'reassign'
+      get()._pushUndo('update', { ...existing }, label)
+      upsertTask(user.uid, { ...existing, ...updates })
+    }
   },
 
   deleteTask: (id) => {
-    const { user, isViewer } = get()
+    const { user, isViewer, tasks } = get()
     if (!user || isViewer) return
+    const existing = tasks.find((t) => t.id === id)
+    if (existing) get()._pushUndo('delete', { ...existing }, 'delete')
     removeTask(user.uid, id)
   },
 
@@ -242,7 +283,10 @@ const useStore = create((set, get) => ({
     const { user, isViewer, tasks } = get()
     if (!user || isViewer) return
     const existing = tasks.find((t) => t.id === id)
-    if (existing) upsertTask(user.uid, { ...existing, bucket })
+    if (existing) {
+      get()._pushUndo('update', { ...existing }, 'move')
+      upsertTask(user.uid, { ...existing, bucket })
+    }
   },
 
   reorderProjects: (fromIndex, toIndex) => {

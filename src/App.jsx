@@ -7,7 +7,7 @@ import SignInPage from './components/SignInPage'
 import AppSwitcher from './AppSwitcher'
 
 export default function App() {
-  const { user, authLoading, isViewer, initAuth } = useStore()
+  const { user, authLoading, isViewer, initAuth, undo, _undoToast, _undoStack } = useStore()
   const [filters, setFilters] = useState({ starred: false, priorities: [] })
   const [view, setView] = useState('kanban') // 'kanban' or 'agenda'
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -16,6 +16,18 @@ export default function App() {
   useEffect(() => {
     initAuth()
   }, [])
+
+  // Global ⌘+Z / Ctrl+Z handler
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        undo()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [undo])
 
   // Loading spinner while Firebase checks if you're already signed in
   if (authLoading) {
@@ -74,6 +86,20 @@ export default function App() {
         </div>
       </main>
       </div>
+
+      {/* Undo toast */}
+      {_undoToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
+          <div className="bg-gray-900 text-white text-sm rounded-lg px-4 py-2.5 shadow-lg flex items-center gap-3">
+            <span>{_undoToast}</span>
+            {_undoStack.length > 0 && (
+              <button onClick={undo} className="text-blue-300 hover:text-blue-100 font-medium text-xs">
+                Undo again
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
