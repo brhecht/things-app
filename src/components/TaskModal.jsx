@@ -57,7 +57,7 @@ export default function TaskModal({ task, onClose }) {
         const preview = message.length > 150 ? message.slice(0, 150).trim() + '…' : message
         const payload = `[B Things] ${title.trim()}\n${preview}\n→ ${taskUrl}`
         console.log('[B Things] @nico detected, sending to Brain Inbox:', { project: 'B Things', summary: payload })
-        fetch('https://brain-inbox-six.vercel.app/api/handoff-notify', {
+        fetch('/api/notify-nico', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ project: 'B Things', summary: payload }),
