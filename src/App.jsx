@@ -92,8 +92,8 @@ export default function App() {
 
         {/* Main content area */}
         <main className="flex-1 overflow-hidden">
-          {showMobileCompleted ? (
-            <CompletedView onBack={() => setShowMobileCompleted(false)} />
+          {mobileTab === 'completed' ? (
+            <CompletedView />
           ) : mobileProjectView !== null ? (
             // Viewing a specific project
             <div className="h-full flex flex-col">
@@ -127,8 +127,8 @@ export default function App() {
         </main>
 
         {/* Quick add + bottom nav */}
-        {!isViewer && !showMobileCompleted && <MobileQuickAdd defaultBucket={quickAddBucket} />}
-        <MobileBottomNav activeTab={showMobileCompleted ? null : mobileTab} onTabChange={(tab) => { setShowMobileCompleted(false); setMobileTab(tab) }} />
+        {!isViewer && mobileTab !== 'completed' && <MobileQuickAdd defaultBucket={quickAddBucket} />}
+        <MobileBottomNav activeTab={mobileTab} onTabChange={setMobileTab} />
 
         {/* Undo toast — positioned above bottom nav */}
         {_undoToast && (

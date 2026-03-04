@@ -5,6 +5,7 @@ const BUCKET_TABS = [
   { id: 'today', label: 'Today', icon: TodayIcon },
   { id: 'all', label: 'All', icon: AllIcon },
   { id: 'projects', label: 'Projects', icon: ProjectsIcon },
+  { id: 'completed', label: 'Done', icon: CompletedIcon },
 ]
 
 function InboxIcon({ active }) {
@@ -42,6 +43,15 @@ function ProjectsIcon({ active }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.5} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    </svg>
+  )
+}
+
+function CompletedIcon({ active }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.5} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
     </svg>
   )
 }
