@@ -56,11 +56,15 @@ export default function TaskModal({ task, onClose }) {
         const taskUrl = `https://things-app.vercel.app/?task=${task.id}`
         const preview = message.length > 150 ? message.slice(0, 150).trim() + '…' : message
         const payload = `[B Things] ${title.trim()}\n${preview}\n→ ${taskUrl}`
+        console.log('[B Things] @nico detected, sending to Brain Inbox:', { project: 'B Things', summary: payload })
         fetch('https://brain-inbox-six.vercel.app/api/handoff-notify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ project: 'B Things', summary: payload }),
-        }).catch((err) => console.error('Brain Inbox notify failed:', err))
+        })
+          .then((r) => r.json())
+          .then((data) => console.log('[B Things] Brain Inbox response:', data))
+          .catch((err) => console.error('[B Things] Brain Inbox notify failed:', err))
       }
     }
     onClose()
