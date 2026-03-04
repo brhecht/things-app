@@ -53,7 +53,7 @@ export default function TaskModal({ task, onClose }) {
       // @nico detection — send to Brain Inbox with deep link
       if (notes.trim().toLowerCase().startsWith('@nico')) {
         const message = notes.trim().slice(5).trim()
-        const taskUrl = `https://things-app.vercel.app/?task=${task.id}`
+        const taskUrl = `https://things-app-gamma.vercel.app/?task=${task.id}`
         const preview = message.length > 150 ? message.slice(0, 150).trim() + '…' : message
         const payload = `[B Things] ${title.trim()}\n${preview}\n→ ${taskUrl}`
         console.log('[B Things] @nico detected, sending to Brain Inbox:', { project: 'B Things', summary: payload })
