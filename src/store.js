@@ -113,9 +113,9 @@ const useStore = create((set, get) => ({
           }
 
         } else {
-          // Unknown user: sign them in to their own empty space
-          set({ user: firebaseUser, authLoading: false, isViewer: false })
-          get()._startSync(firebaseUser.uid)
+          // Unknown user: reject access
+          await logOut()
+          set({ user: null, authLoading: false, isViewer: false })
         }
       } else {
         set({ user: null, authLoading: false, isViewer: false, tasks: [], projects: [] })
@@ -238,7 +238,7 @@ const useStore = create((set, get) => ({
   // ── Task actions (disabled for viewers) ────────────────────────
   addTask: (title, projectId, bucket = 'today') => {
     const { user, isViewer } = get()
-    if (!user || isViewer) return
+    if (!user || isViewer) return null
     const task = {
       id: uid(),
       title,
@@ -252,6 +252,7 @@ const useStore = create((set, get) => ({
       createdAt: Date.now(),
     }
     upsertTask(user.uid, task)
+    return task
   },
 
   updateTask: (id, updates) => {
