@@ -8,13 +8,14 @@ import MobileAgendaView from './components/MobileAgendaView'
 import MobileBottomNav from './components/MobileBottomNav'
 import MobileQuickAdd from './components/MobileQuickAdd'
 import MobileProjectList from './components/MobileProjectList'
+import CompletedView from './components/CompletedView'
 import SignInPage from './components/SignInPage'
 import AppSwitcher from './AppSwitcher'
 
 export default function App() {
   const { user, authLoading, isViewer, initAuth, undo, _undoToast, _undoStack, setSelectedProject, selectedProjectId } = useStore()
   const [filters, setFilters] = useState({ starred: false, priorities: [] })
-  const [view, setView] = useState('kanban') // 'kanban' or 'agenda'
+  const [view, setView] = useState('kanban') // 'kanban' | 'agenda' | 'completed'
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const isMobile = useIsMobile()
 
@@ -22,6 +23,8 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState('today')
   // When viewing a specific project on mobile
   const [mobileProjectView, setMobileProjectView] = useState(null)
+  // Mobile completed view
+  const [showMobileCompleted, setShowMobileCompleted] = useState(false)
 
   // Start listening to auth state once on mount
   useEffect(() => {
@@ -89,7 +92,9 @@ export default function App() {
 
         {/* Main content area */}
         <main className="flex-1 overflow-hidden">
-          {mobileProjectView !== null ? (
+          {showMobileCompleted ? (
+            <CompletedView onBack={() => setShowMobileCompleted(false)} />
+          ) : mobileProjectView !== null ? (
             // Viewing a specific project
             <div className="h-full flex flex-col">
               <button
@@ -109,7 +114,10 @@ export default function App() {
               </div>
             </div>
           ) : mobileTab === 'projects' ? (
-            <MobileProjectList onSelectProject={handleSelectProject} />
+            <MobileProjectList
+              onSelectProject={handleSelectProject}
+              onShowCompleted={() => setShowMobileCompleted(true)}
+            />
           ) : (
             <MobileAgendaView
               bucketFilter={bucketFilter}
@@ -119,8 +127,8 @@ export default function App() {
         </main>
 
         {/* Quick add + bottom nav */}
-        {!isViewer && <MobileQuickAdd defaultBucket={quickAddBucket} />}
-        <MobileBottomNav activeTab={mobileTab} onTabChange={setMobileTab} />
+        {!isViewer && !showMobileCompleted && <MobileQuickAdd defaultBucket={quickAddBucket} />}
+        <MobileBottomNav activeTab={showMobileCompleted ? null : mobileTab} onTabChange={(tab) => { setShowMobileCompleted(false); setMobileTab(tab) }} />
 
         {/* Undo toast — positioned above bottom nav */}
         {_undoToast && (
@@ -139,7 +147,7 @@ export default function App() {
     )
   }
 
-  // ── DESKTOP LAYOUT (unchanged) ────────────────────────────────
+  // ── DESKTOP LAYOUT ────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white font-sans antialiased">
       <AppSwitcher current="things" />
@@ -169,9 +177,19 @@ export default function App() {
           >
             Agenda
           </button>
+          <button
+            onClick={() => setView('completed')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+              view === 'completed' ? 'bg-white text-gray-800 shadow-sm border border-gray-200' : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            Completed
+          </button>
         </div>
         <div className="flex-1 overflow-hidden">
-          {view === 'kanban' ? (
+          {view === 'completed' ? (
+            <CompletedView />
+          ) : view === 'kanban' ? (
             <KanbanBoard filters={filters} />
           ) : (
             <AgendaView filters={filters} />
