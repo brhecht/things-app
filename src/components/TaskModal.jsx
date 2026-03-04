@@ -49,6 +49,17 @@ export default function TaskModal({ task, onClose }) {
         else finalBucket = 'someday'
       }
       updateTask(task.id, { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null })
+
+      // @nico detection — send to Brain Inbox
+      if (notes.trim().toLowerCase().startsWith('@nico')) {
+        const message = notes.trim().slice(5).trim()
+        const payload = `[B Things] "${title.trim()}" — ${message}`
+        fetch('https://brain-inbox-six.vercel.app/api/handoff-notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: 'B Things', summary: payload }),
+        }).catch((err) => console.error('Brain Inbox notify failed:', err))
+      }
     }
     onClose()
   }
@@ -196,13 +207,18 @@ export default function TaskModal({ task, onClose }) {
           {/* Notes */}
           <div className="flex items-start gap-3">
             <label className="text-sm text-gray-400 w-20 flex-shrink-0 mt-2">Notes</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add notes…"
-              rows={4}
-              className="flex-1 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 resize-none"
-            />
+            <div className="flex-1">
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Add notes… @nico to notify Nico"
+                rows={4}
+                className="w-full text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 resize-none"
+              />
+              {notes.trim().toLowerCase().startsWith('@nico') && (
+                <p className="text-xs text-amber-600 mt-1">Will notify Nico's Brain Inbox on save</p>
+              )}
+            </div>
           </div>
         </div>
 
