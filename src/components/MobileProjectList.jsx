@@ -63,20 +63,18 @@ export default function MobileProjectList({ onSelectProject, onShowCompleted }) 
           })}
         </div>
 
-        {/* Completed tasks link */}
-        {completedCount > 0 && onShowCompleted && (
-          <button
-            onClick={onShowCompleted}
-            className="w-full flex items-center gap-3.5 px-4 py-3.5 mt-4 rounded-xl active:bg-gray-100 transition-colors"
-          >
-            <span className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm">✓</span>
-            <span className="flex-1 text-left text-[15px] font-medium text-gray-400">Completed</span>
-            <span className="text-sm text-gray-300 font-medium">{completedCount}</span>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-gray-300">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-        )}
+        {/* Completed tasks link — always visible */}
+        <button
+          onClick={onShowCompleted}
+          className="w-full flex items-center gap-3.5 px-4 py-3.5 mt-4 rounded-xl active:bg-gray-100 transition-colors"
+        >
+          <span className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-sm">✓</span>
+          <span className="flex-1 text-left text-[15px] font-medium text-gray-400">Completed</span>
+          <span className="text-sm text-gray-300 font-medium">{completedCount}</span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-gray-300">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
       </div>
     </div>
   )
