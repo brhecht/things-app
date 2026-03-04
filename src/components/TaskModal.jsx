@@ -30,7 +30,8 @@ export default function TaskModal({ task, onClose }) {
   const [dueDate,   setDueDate]   = useState(task.dueDate || '')
 
   const titleRef = useRef(null)
-  useEffect(() => { titleRef.current?.focus() }, [])
+  const isMobile = window.innerWidth < 768
+  useEffect(() => { if (!isMobile) titleRef.current?.focus() }, [])
 
   const handleSave = () => {
     if (title.trim()) {
@@ -75,11 +76,11 @@ export default function TaskModal({ task, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-end md:items-center justify-center z-50 md:p-4"
       onClick={handleSave}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+        className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Title */}

@@ -34,72 +34,99 @@ const PROJECT_ORDER = [
 const BUCKET_ORDER = ['inbox', 'today', 'waiting', 'tomorrow', 'soon', 'someday']
 
 function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects }) {
-  const ref = useRef(null)
   const startX = useRef(0)
   const startY = useRef(0)
-  const currentX = useRef(0)
   const swiping = useRef(false)
   const [offset, setOffset] = useState(0)
-  const [committed, setCommitted] = useState(null) // 'left' | 'right' | null
+  const [revealed, setRevealed] = useState(null) // 'left' | 'right' | null — locks open after swipe
 
-  const THRESHOLD = 80
+  const SNAP_THRESHOLD = 60  // how far to swipe before it snaps open
+  const REVEAL_WIDTH = 80    // how wide the revealed action button is
 
   const handleTouchStart = (e) => {
     startX.current = e.touches[0].clientX
     startY.current = e.touches[0].clientY
-    currentX.current = 0
     swiping.current = false
-    setCommitted(null)
   }
 
   const handleTouchMove = (e) => {
     const dx = e.touches[0].clientX - startX.current
     const dy = e.touches[0].clientY - startY.current
 
-    // If vertical motion > horizontal, let the scroll happen
+    // If vertical motion > horizontal on first move, let scroll happen
     if (!swiping.current && Math.abs(dy) > Math.abs(dx)) return
     swiping.current = true
 
-    currentX.current = dx
-    setOffset(dx)
-
-    if (dx > THRESHOLD) setCommitted('right')
-    else if (dx < -THRESHOLD) setCommitted('left')
-    else setCommitted(null)
+    // If already revealed, allow swiping back
+    if (revealed === 'right') {
+      setOffset(Math.max(0, Math.min(REVEAL_WIDTH, REVEAL_WIDTH + dx)))
+    } else if (revealed === 'left') {
+      setOffset(Math.min(0, Math.max(-REVEAL_WIDTH, -REVEAL_WIDTH + dx)))
+    } else {
+      // Dampen the swipe so it feels controlled
+      const dampened = dx * 0.6
+      setOffset(dampened)
+    }
   }
 
   const handleTouchEnd = () => {
     if (!swiping.current) {
-      onTap()
+      // It was a tap
+      if (revealed) {
+        // If revealed, tap on card area closes it
+        setRevealed(null)
+        setOffset(0)
+      } else {
+        onTap()
+      }
       return
     }
 
-    if (committed === 'right') {
-      // Swipe right → complete
-      setOffset(400)
-      setTimeout(() => onComplete(), 200)
-    } else if (committed === 'left') {
-      // Swipe left → bump to next bucket
-      setOffset(-400)
-      const idx = BUCKET_ORDER.indexOf(task.bucket)
-      const nextBucket = BUCKET_ORDER[Math.min(idx + 1, BUCKET_ORDER.length - 1)]
-      if (nextBucket !== task.bucket) {
-        setTimeout(() => onBucketChange(nextBucket), 200)
+    if (revealed) {
+      // Already revealed — check if user swiped it back to close
+      if (revealed === 'right' && offset < REVEAL_WIDTH / 2) {
+        setRevealed(null)
+        setOffset(0)
+      } else if (revealed === 'left' && offset > -REVEAL_WIDTH / 2) {
+        setRevealed(null)
+        setOffset(0)
+      } else {
+        // Snap back to revealed position
+        setOffset(revealed === 'right' ? REVEAL_WIDTH : -REVEAL_WIDTH)
       }
-      setTimeout(() => { setOffset(0); setCommitted(null) }, 300)
     } else {
-      setOffset(0)
+      // Fresh swipe — decide whether to reveal
+      if (offset > SNAP_THRESHOLD) {
+        setRevealed('right')
+        setOffset(REVEAL_WIDTH)
+      } else if (offset < -SNAP_THRESHOLD) {
+        setRevealed('left')
+        setOffset(-REVEAL_WIDTH)
+      } else {
+        setOffset(0)
+      }
     }
     swiping.current = false
   }
 
-  const projectName = projects.find(p => p.id === task.projectId)?.name || ''
+  const handleConfirmComplete = () => {
+    setOffset(400)
+    setTimeout(() => onComplete(), 150)
+  }
 
-  const bgColor = committed === 'right'
-    ? 'bg-green-500'
-    : committed === 'left'
-    ? 'bg-blue-500'
-    : 'bg-gray-100'
+  const handleConfirmBucket = () => {
+    const idx = BUCKET_ORDER.indexOf(task.bucket)
+    const nextBucket = BUCKET_ORDER[Math.min(idx + 1, BUCKET_ORDER.length - 1)]
+    if (nextBucket !== task.bucket) {
+      setOffset(-400)
+      setTimeout(() => onBucketChange(nextBucket), 150)
+    } else {
+      setRevealed(null)
+      setOffset(0)
+    }
+  }
+
+  const projectName = projects.find(p => p.id === task.projectId)?.name || ''
 
   const nextBucketLabel = () => {
     const idx = BUCKET_ORDER.indexOf(task.bucket)
@@ -109,23 +136,30 @@ function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects }
 
   return (
     <div className="relative overflow-hidden rounded-xl mb-1.5">
-      {/* Swipe reveal background */}
-      <div className={`absolute inset-0 flex items-center justify-between px-5 ${bgColor} transition-colors`}>
-        <span className="text-white text-sm font-semibold">
-          {committed === 'right' ? '✓ Done' : ''}
-        </span>
-        <span className="text-white text-sm font-semibold">
-          {committed === 'left' ? `→ ${nextBucketLabel()}` : ''}
-        </span>
-      </div>
+      {/* Left action (revealed on swipe right) — Complete */}
+      <button
+        onClick={handleConfirmComplete}
+        className="absolute left-0 top-0 bottom-0 flex items-center justify-center bg-green-500 text-white font-semibold text-sm active:bg-green-600"
+        style={{ width: REVEAL_WIDTH }}
+      >
+        ✓ Done
+      </button>
+
+      {/* Right action (revealed on swipe left) — Move bucket */}
+      <button
+        onClick={handleConfirmBucket}
+        className="absolute right-0 top-0 bottom-0 flex items-center justify-center bg-blue-500 text-white font-semibold text-xs active:bg-blue-600 px-2"
+        style={{ width: REVEAL_WIDTH }}
+      >
+        → {nextBucketLabel()}
+      </button>
 
       {/* Card */}
       <div
-        ref={ref}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`relative bg-white px-4 py-3.5 flex items-center gap-3 transition-transform ${
+        className={`relative bg-white px-4 py-3.5 flex items-center gap-3 ${
           task.priority === 'high' ? 'border-l-[3px] border-l-emerald-500' :
           task.priority === 'medium' ? 'border-l-[3px] border-l-amber-400' :
           task.priority === 'low' ? 'border-l-[3px] border-l-violet-400' : ''
