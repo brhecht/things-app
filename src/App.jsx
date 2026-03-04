@@ -1,16 +1,27 @@
 import { useEffect, useState } from 'react'
 import useStore from './store'
+import useIsMobile from './hooks/useIsMobile'
 import Sidebar from './components/Sidebar'
 import KanbanBoard from './components/KanbanBoard'
 import AgendaView from './components/AgendaView'
+import MobileAgendaView from './components/MobileAgendaView'
+import MobileBottomNav from './components/MobileBottomNav'
+import MobileQuickAdd from './components/MobileQuickAdd'
+import MobileProjectList from './components/MobileProjectList'
 import SignInPage from './components/SignInPage'
 import AppSwitcher from './AppSwitcher'
 
 export default function App() {
-  const { user, authLoading, isViewer, initAuth, undo, _undoToast, _undoStack } = useStore()
+  const { user, authLoading, isViewer, initAuth, undo, _undoToast, _undoStack, setSelectedProject, selectedProjectId } = useStore()
   const [filters, setFilters] = useState({ starred: false, priorities: [] })
   const [view, setView] = useState('kanban') // 'kanban' or 'agenda'
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const isMobile = useIsMobile()
+
+  // Mobile tab state: 'inbox' | 'today' | 'all' | 'projects'
+  const [mobileTab, setMobileTab] = useState('today')
+  // When viewing a specific project on mobile
+  const [mobileProjectView, setMobileProjectView] = useState(null)
 
   // Start listening to auth state once on mount
   useEffect(() => {
@@ -46,7 +57,89 @@ export default function App() {
     return <SignInPage />
   }
 
-  // Signed in → show the app
+  // ── MOBILE LAYOUT ─────────────────────────────────────────────
+  if (isMobile) {
+    const handleSelectProject = (projectId) => {
+      setMobileProjectView(projectId)
+      setSelectedProject(projectId)
+    }
+
+    const handleBackFromProject = () => {
+      setMobileProjectView(null)
+      setSelectedProject(null)
+      setMobileTab('projects')
+    }
+
+    // Determine bucket filter from tab
+    const bucketFilter =
+      mobileTab === 'inbox' ? 'inbox' :
+      mobileTab === 'today' ? 'today' :
+      'all'
+
+    // Default bucket for quick-add based on current tab
+    const quickAddBucket = mobileTab === 'today' ? 'today' : 'inbox'
+
+    return (
+      <div className="flex flex-col h-screen bg-gray-50 font-sans antialiased" style={{ touchAction: 'manipulation' }}>
+        {isViewer && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-700 text-center pt-[env(safe-area-inset-top)]">
+            View only — you're viewing Brian's tasks
+          </div>
+        )}
+
+        {/* Main content area */}
+        <main className="flex-1 overflow-hidden">
+          {mobileProjectView !== null ? (
+            // Viewing a specific project
+            <div className="h-full flex flex-col">
+              <button
+                onClick={handleBackFromProject}
+                className="flex items-center gap-1.5 px-4 pt-5 pb-1 text-blue-600 text-sm font-medium"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+                Projects
+              </button>
+              <div className="flex-1 overflow-hidden">
+                <MobileAgendaView
+                  bucketFilter="all"
+                  projectFilter={mobileProjectView}
+                />
+              </div>
+            </div>
+          ) : mobileTab === 'projects' ? (
+            <MobileProjectList onSelectProject={handleSelectProject} />
+          ) : (
+            <MobileAgendaView
+              bucketFilter={bucketFilter}
+              projectFilter={null}
+            />
+          )}
+        </main>
+
+        {/* Quick add + bottom nav */}
+        {!isViewer && <MobileQuickAdd defaultBucket={quickAddBucket} />}
+        <MobileBottomNav activeTab={mobileTab} onTabChange={setMobileTab} />
+
+        {/* Undo toast — positioned above bottom nav */}
+        {_undoToast && (
+          <div className="fixed bottom-20 left-4 right-4 z-50 animate-fade-in">
+            <div className="bg-gray-900 text-white text-sm rounded-lg px-4 py-2.5 shadow-lg flex items-center gap-3">
+              <span className="flex-1">{_undoToast}</span>
+              {_undoStack.length > 0 && (
+                <button onClick={undo} className="text-blue-300 font-medium text-xs flex-shrink-0">
+                  Undo
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── DESKTOP LAYOUT (unchanged) ────────────────────────────────
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-white font-sans antialiased">
       <AppSwitcher current="things" />
