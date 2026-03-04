@@ -9,11 +9,12 @@ import MobileBottomNav from './components/MobileBottomNav'
 import MobileQuickAdd from './components/MobileQuickAdd'
 import MobileProjectList from './components/MobileProjectList'
 import CompletedView from './components/CompletedView'
+import TaskModal from './components/TaskModal'
 import SignInPage from './components/SignInPage'
 import AppSwitcher from './AppSwitcher'
 
 export default function App() {
-  const { user, authLoading, isViewer, initAuth, undo, _undoToast, _undoStack, setSelectedProject, selectedProjectId } = useStore()
+  const { user, authLoading, isViewer, initAuth, undo, _undoToast, _undoStack, setSelectedProject, selectedProjectId, tasks } = useStore()
   const [filters, setFilters] = useState({ starred: false, priorities: [] })
   const [view, setView] = useState('kanban') // 'kanban' | 'agenda' | 'completed'
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -26,10 +27,27 @@ export default function App() {
   // Mobile completed view
   const [showMobileCompleted, setShowMobileCompleted] = useState(false)
 
+  // Deep-link: ?task=docId opens that task's modal
+  const [deepLinkTask, setDeepLinkTask] = useState(null)
+
   // Start listening to auth state once on mount
   useEffect(() => {
     initAuth()
   }, [])
+
+  // Parse ?task= param and open modal once tasks are loaded
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const taskId = params.get('task')
+    if (taskId && tasks.length > 0 && !deepLinkTask) {
+      const found = tasks.find(t => t.id === taskId)
+      if (found) {
+        setDeepLinkTask(found)
+        // Clean URL without reload
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+    }
+  }, [tasks])
 
   // Global ⌘+Z / Ctrl+Z handler
   useEffect(() => {
@@ -130,6 +148,11 @@ export default function App() {
         {!isViewer && mobileTab !== 'completed' && <MobileQuickAdd defaultBucket={quickAddBucket} />}
         <MobileBottomNav activeTab={mobileTab} onTabChange={setMobileTab} />
 
+        {/* Deep-link task modal */}
+        {deepLinkTask && (
+          <TaskModal task={tasks.find(t => t.id === deepLinkTask.id) || deepLinkTask} onClose={() => setDeepLinkTask(null)} />
+        )}
+
         {/* Undo toast — positioned above bottom nav */}
         {_undoToast && (
           <div className="fixed bottom-20 left-4 right-4 z-50 animate-fade-in">
@@ -197,6 +220,11 @@ export default function App() {
         </div>
       </main>
       </div>
+
+      {/* Deep-link task modal */}
+      {deepLinkTask && (
+        <TaskModal task={tasks.find(t => t.id === deepLinkTask.id) || deepLinkTask} onClose={() => setDeepLinkTask(null)} />
+      )}
 
       {/* Undo toast */}
       {_undoToast && (

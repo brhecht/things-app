@@ -50,10 +50,12 @@ export default function TaskModal({ task, onClose }) {
       }
       updateTask(task.id, { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null })
 
-      // @nico detection — send to Brain Inbox
+      // @nico detection — send to Brain Inbox with deep link
       if (notes.trim().toLowerCase().startsWith('@nico')) {
         const message = notes.trim().slice(5).trim()
-        const payload = `[B Things] "${title.trim()}" — ${message}`
+        const taskUrl = `https://things-app.vercel.app/?task=${task.id}`
+        const preview = message.length > 150 ? message.slice(0, 150).trim() + '…' : message
+        const payload = `[B Things] ${title.trim()}\n${preview}\n→ ${taskUrl}`
         fetch('https://brain-inbox-six.vercel.app/api/handoff-notify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
