@@ -1,8 +1,10 @@
 const APPS = [
-  { key: 'eddy',   label: 'B Eddy',   icon: 'E', url: 'https://eddy-tracker.vercel.app',    color: '#7C6BCC' },
-  { key: 'things', label: 'B Things',  icon: 'T', url: 'https://things-app-gamma.vercel.app', color: '#3ABD82' },
-  { key: 'people', label: 'B People',  icon: 'P', url: 'https://b-people.vercel.app',               color: '#E07A5F' },
-  { key: 'nico',   label: 'B Nico',    icon: 'N', url: 'https://brain-inbox-six.vercel.app',  color: '#5B9BD5' },
+  { key: 'eddy',      label: 'B Eddy',      icon: 'E', url: 'https://eddy-tracker.vercel.app',         color: '#7C6BCC' },
+  { key: 'things',    label: 'B Things',     icon: 'T', url: 'https://things-app-gamma.vercel.app',     color: '#3ABD82' },
+  { key: 'content',   label: 'B Content',    icon: 'C', url: 'https://content-calendar-nine.vercel.app', color: '#E6A817' },
+  { key: 'people',    label: 'B People',     icon: 'P', url: 'https://b-people.vercel.app',             color: '#E07A5F' },
+  { key: 'marketing', label: 'B Marketing',  icon: 'M', url: 'https://b-marketing.vercel.app',          color: '#D4637A' },
+  { key: 'funnel',    label: 'HC Funnel',    icon: 'F', url: 'https://hc-funnel.vercel.app',            color: '#F4845F' },
 ]
 
 const BAR_STYLE = {
