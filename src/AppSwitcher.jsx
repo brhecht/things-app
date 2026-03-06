@@ -54,9 +54,9 @@ const pillBase = {
   border: 'none',
 }
 
-const iconStyle = (color, isActive) => ({
+const iconStyle = (color) => ({
   width: '16px', height: '16px', borderRadius: '4px',
-  background: isActive ? color : '#444',
+  background: color,
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   color: '#fff', fontSize: '9px', fontWeight: 700,
   fontFamily: "'Playfair Display', Georgia, serif",
@@ -156,7 +156,7 @@ export default function AppSwitcher({ current }) {
                 transition: 'background 0.15s',
               }}
             >
-              <span style={iconStyle('#2D2A26', true)}>B</span>
+              <span style={iconStyle('#2D2A26')}>B</span>
               B Hub
             </a>
             {APPS.map((app) => {
@@ -175,7 +175,7 @@ export default function AppSwitcher({ current }) {
                     transition: 'background 0.15s',
                   }}
                 >
-                  <span style={iconStyle(app.color, isActive)}>{app.icon}</span>
+                  <span style={iconStyle(app.color)}>{app.icon}</span>
                   {app.label}
                 </a>
               )
@@ -203,7 +203,7 @@ export default function AppSwitcher({ current }) {
             onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.background = '#2A2A2A'; e.currentTarget.style.color = '#ccc' } }}
             onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#999' } }}
           >
-            <span style={iconStyle(app.color, isActive)}>
+            <span style={iconStyle(app.color)}>
               {app.icon}
             </span>
             {app.label}
