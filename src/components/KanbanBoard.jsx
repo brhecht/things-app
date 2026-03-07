@@ -1,0 +1,293 @@
+import { useState, useRef } from 'react'
+import useStore from '../store'
+import TaskCard from './TaskCard'
+import TaskModal from './TaskModal'
+
+const BUCKETS = [
+  { id: 'inbox',    label: 'Inbox',    accent: 'text-orange-600', border: 'border-orange-200', dropBg: 'bg-orange-50', count: 'bg-orange-100 text-orange-700' },
+  { id: 'today',    label: 'Today',    accent: 'text-blue-600',   border: 'border-blue-200',   dropBg: 'bg-blue-50',   count: 'bg-blue-100 text-blue-700' },
+  { id: 'waiting',  label: 'Waiting / Delegated', accent: 'text-amber-600', border: 'border-amber-200', dropBg: 'bg-amber-50', count: 'bg-amber-100 text-amber-700' },
+  { id: 'tomorrow', label: 'Tomorrow', accent: 'text-indigo-600', border: 'border-indigo-200', dropBg: 'bg-indigo-50', count: 'bg-indigo-100 text-indigo-700' },
+  { id: 'soon',     label: 'This Week',     accent: 'text-violet-600', border: 'border-violet-200', dropBg: 'bg-violet-50', count: 'bg-violet-100 text-violet-700' },
+  { id: 'someday',  label: 'Later',  accent: 'text-gray-500',   border: 'border-gray-200',   dropBg: 'bg-gray-100',  count: 'bg-gray-100 text-gray-500' },
+]
+
+const PROJECT_COLORS = {
+  'hc-admin':         'bg-blue-100 text-blue-700',
+  'hc-content':       'bg-emerald-100 text-emerald-700',
+  'hc-revenue':       'bg-amber-100 text-amber-700',
+  'portfolio':        'bg-purple-100 text-purple-700',
+  'personal-finance': 'bg-teal-100 text-teal-700',
+  'life-admin':       'bg-orange-100 text-orange-700',
+  'network':          'bg-cyan-100 text-cyan-700',
+  'georgetown':       'bg-rose-100 text-rose-700',
+  'friends':          'bg-pink-100 text-pink-700',
+  'from-nico':        'bg-lime-100 text-lime-700',
+  'unassigned':       'bg-stone-100 text-stone-600',
+}
+
+function ProjectDropGroup({ proj, bucket, children }) {
+  const { updateTask } = useStore()
+  const [isOver, setIsOver] = useState(false)
+
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsOver(true) }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsOver(false) }}
+      onDrop={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsOver(false)
+        const id = e.dataTransfer.getData('taskId')
+        if (id) updateTask(id, { projectId: proj.id, bucket: bucket.id })
+      }}
+      className={`rounded-lg transition-all ${isOver ? 'ring-2 ring-blue-400 ring-offset-1 bg-blue-50/30' : ''}`}
+    >
+      <div className={`text-xs font-semibold uppercase tracking-wider px-3 py-1.5 rounded-md mb-2 ${PROJECT_COLORS[proj.id] || 'bg-gray-100 text-gray-600'}`}>
+        {proj.name}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function Column({ bucket, tasks, projects, onTaskClick }) {
+  const { addTask, moveTask, selectedProjectId } = useStore()
+  const [adding, setAdding] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [newProjectId, setNewProjectId] = useState(selectedProjectId || projects[0]?.id || '')
+  const [headerOver, setHeaderOver] = useState(false)
+
+  const handleAdd = (e) => {
+    e.preventDefault()
+    if (newTitle.trim() && newProjectId) {
+      addTask(newTitle.trim(), newProjectId, bucket.id)
+      setNewTitle('')
+      setAdding(false)
+    }
+  }
+
+  // Split tasks: ones with a project vs unassigned (inbox items)
+  const unassigned = tasks
+    .filter((t) => !t.projectId)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+
+  // Group tasks by project, maintaining project list order
+  // Within each project: starred first, then by sortWeight (highest = most recently starred/promoted)
+  const grouped = projects
+    .map((proj) => ({
+      proj,
+      tasks: tasks
+        .filter((t) => t.projectId === proj.id)
+        .sort((a, b) => {
+          // Starred always on top
+          if (a.starred !== b.starred) return b.starred ? 1 : -1
+          // Then by sortWeight (recently starred/unstarred tasks stay near top)
+          return (b.sortWeight || 0) - (a.sortWeight || 0)
+        }),
+    }))
+    .filter(({ tasks }) => tasks.length > 0)
+
+  return (
+    <div className="flex-1 flex flex-col min-w-0">
+      {/* Column header — drop here to move bucket only (preserve project) */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setHeaderOver(true) }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setHeaderOver(false) }}
+        onDrop={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          setHeaderOver(false)
+          const id = e.dataTransfer.getData('taskId')
+          if (id) moveTask(id, bucket.id)
+        }}
+        className={`flex items-center justify-between mb-4 pb-3 border-b-2 ${bucket.border} rounded-t-lg transition-colors ${headerOver ? `${bucket.dropBg} ring-2 ring-offset-1 ring-current ${bucket.accent}` : ''}`}
+      >
+        <h2 className={`font-semibold text-sm uppercase tracking-widest ${bucket.accent}`}>{bucket.label}</h2>
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bucket.count}`}>{tasks.length}</span>
+      </div>
+
+      {/* Scrollable task area */}
+      <div className="flex-1 min-h-[120px] rounded-2xl p-2 -m-2 space-y-4">
+        {/* Unassigned tasks (no project — typically inbox items) */}
+        {unassigned.length > 0 && (
+          <div className="space-y-2">
+            {unassigned.map((task) => (
+              <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
+            ))}
+          </div>
+        )}
+
+        {/* Project groups — drop on a project group to reassign project */}
+        {grouped.map(({ proj, tasks: projTasks }) => (
+          <ProjectDropGroup key={proj.id} proj={proj} bucket={bucket}>
+            <div className="space-y-2">
+              {projTasks.map((task) => (
+                <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
+              ))}
+            </div>
+          </ProjectDropGroup>
+        ))}
+
+        {/* Add task */}
+        {adding ? (
+          <form onSubmit={handleAdd} className="bg-white rounded-xl border border-blue-200 shadow-sm p-3 space-y-2">
+            <input
+              autoFocus
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => e.key === 'Escape' && setAdding(false)}
+              placeholder="Task name…"
+              className="w-full text-sm outline-none text-gray-700 placeholder-gray-300"
+            />
+            <select
+              value={newProjectId}
+              onChange={(e) => setNewProjectId(e.target.value)}
+              className="w-full text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-blue-400"
+            >
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <div className="flex items-center gap-2">
+              <button type="submit" className="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 font-medium">Add</button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (newTitle.trim() && newProjectId) {
+                    const task = addTask(newTitle.trim(), newProjectId, bucket.id)
+                    setNewTitle('')
+                    setAdding(false)
+                    if (task) onTaskClick(task)
+                  }
+                }}
+                className="p-1 text-gray-400 hover:text-blue-600 transition-colors rounded"
+                title="Add & open full editor"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                  <path d="M4 2a.75.75 0 0 0-.75.75v1.5a.75.75 0 0 0 1.5 0V3.5h.75a.75.75 0 0 0 0-1.5H4ZM9.75 2.75A.75.75 0 0 1 10.5 2h1.75a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V3.5h-1a.75.75 0 0 1-.75-.75ZM3.25 9.75A.75.75 0 0 1 4 9h1.5a.75.75 0 0 1 0 1.5H4.75v.75a.75.75 0 0 1-1.5 0V9.75ZM10.5 9a.75.75 0 0 0-.75.75v1.5a.75.75 0 0 0 .75.75h1.75a.75.75 0 0 0 .75-.75v-1.5a.75.75 0 0 0-1.5 0v.75h-1A.75.75 0 0 0 10.5 9Z" />
+                </svg>
+              </button>
+              <button type="button" onClick={() => setAdding(false)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+            </div>
+          </form>
+        ) : (
+          <button
+            onClick={() => { setNewProjectId(selectedProjectId || projects[0]?.id || ''); setAdding(true) }}
+            className="w-full text-left text-sm text-gray-300 hover:text-gray-500 px-1 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            + Add task
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ResizeHandle({ bucketId, nextBucketId, colWidths, setColWidths }) {
+  const handleRef = useRef(null)
+
+  const handleMouseDown = (e) => {
+    e.preventDefault()
+    const startX = e.clientX
+    // Measure actual rendered widths of the two adjacent column wrappers
+    const handleEl = handleRef.current
+    const prevCol = handleEl.closest('[data-col-wrapper]').previousElementSibling
+    const nextCol = handleEl.closest('[data-col-wrapper]')
+    // The prev column is actually the prior sibling div[data-col-wrapper]
+    // But our structure: each bucket is a div wrapper. The handle is inside the *next* bucket's wrapper.
+    // So: prevCol's parent = nextCol's parent, prevCol is the previous sibling.
+    const prevWrapper = nextCol.previousElementSibling
+    if (!prevWrapper) return
+    const startPrevWidth = prevWrapper.getBoundingClientRect().width
+    const startNextWidth = nextCol.getBoundingClientRect().width
+
+    const onMouseMove = (e) => {
+      const delta = e.clientX - startX
+      const newPrev = Math.max(180, startPrevWidth + delta)
+      const newNext = Math.max(180, startNextWidth - delta)
+      setColWidths((prev) => ({ ...prev, [bucketId]: newPrev, [nextBucketId]: newNext }))
+    }
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }
+
+  return (
+    <div
+      ref={handleRef}
+      onMouseDown={handleMouseDown}
+      className="w-2 flex-shrink-0 cursor-col-resize group flex items-stretch justify-center"
+    >
+      <div className="w-0.5 bg-transparent group-hover:bg-blue-300 transition-colors rounded-full" />
+    </div>
+  )
+}
+
+export default function KanbanBoard({ filters }) {
+  const { tasks, projects, selectedProjectId } = useStore()
+  const [selectedTask, setSelectedTask] = useState(null)
+  const [colWidths, setColWidths] = useState({})
+
+  // Base visibility: project filter + not completed
+  let visibleTasks = selectedProjectId
+    ? tasks.filter((t) => t.projectId === selectedProjectId && !t.completed)
+    : tasks.filter((t) => !t.completed)
+
+  // Apply filters
+  if (filters.starred) visibleTasks = visibleTasks.filter((t) => t.starred)
+  if (filters.priorities.length > 0) visibleTasks = visibleTasks.filter((t) => filters.priorities.includes(t.priority))
+
+  const selectedProject = projects.find((p) => p.id === selectedProjectId)
+  const hasActiveFilters = filters.starred || filters.priorities.length > 0
+
+  return (
+    <div className="flex flex-col h-full bg-gray-50">
+      {/* Header */}
+      <div className="px-8 py-5 border-b border-gray-100 bg-white">
+        <h1 className="text-xl font-semibold text-gray-800">
+          {selectedProject ? selectedProject.name : 'All Tasks'}
+        </h1>
+        <p className="text-sm text-gray-400 mt-0.5">
+          {visibleTasks.length} active task{visibleTasks.length !== 1 ? 's' : ''}
+          {hasActiveFilters && <span className="ml-1 text-blue-400">(filtered)</span>}
+        </p>
+      </div>
+
+      {/* Board */}
+      <div className="flex-1 overflow-auto p-8">
+        <div className="flex min-h-full">
+          {BUCKETS.filter((bucket) => {
+            // Hide inbox column when it has no tasks
+            if (bucket.id === 'inbox' && visibleTasks.filter((t) => t.bucket === 'inbox').length === 0) return false
+            return true
+          }).map((bucket, i, arr) => (
+            <div key={bucket.id} data-col-wrapper className="flex" style={{ flex: colWidths[bucket.id] ? `0 0 ${colWidths[bucket.id]}px` : '1 1 0%', minWidth: 180 }}>
+              {i > 0 && (
+                <ResizeHandle bucketId={arr[i - 1].id} nextBucketId={bucket.id} colWidths={colWidths} setColWidths={setColWidths} />
+              )}
+              <Column
+                bucket={bucket}
+                tasks={visibleTasks.filter((t) => t.bucket === bucket.id)}
+                projects={projects}
+                onTaskClick={setSelectedTask}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {selectedTask && (
+        <TaskModal
+          task={tasks.find((t) => t.id === selectedTask.id) || selectedTask}
+          onClose={() => setSelectedTask(null)}
+        />
+      )}
+    </div>
+  )
+}
