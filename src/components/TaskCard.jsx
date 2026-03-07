@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import useStore from '../store'
+import { getUserByEmail } from '../users'
 
 const PRIORITY_BORDER = {
   high:   'border-l-[3px] border-l-emerald-500',
@@ -9,7 +10,13 @@ const PRIORITY_BORDER = {
 
 export default function TaskCard({ task, onClick }) {
   const { updateTask, deleteTask } = useStore()
+  const user = useStore((s) => s.user)
   const [showTooltip, setShowTooltip] = useState(false)
+
+  // Unread message indicator
+  const meta = task._msgMeta
+  const emailKey = user?.email?.replace(/\./g, '_')
+  const hasUnread = meta?.lastAt && emailKey && !meta.readBy?.[emailKey]
 
   const handleCheck = (e) => {
     e.stopPropagation()
@@ -68,8 +75,13 @@ export default function TaskCard({ task, onClick }) {
           {task.starred ? '★' : '☆'}
         </button>
 
+        {/* Unread message indicator */}
+        {hasUnread && (
+          <span className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500" title="Unread messages" />
+        )}
+
         {/* Notes indicator */}
-        {task.notes && task.notes.trim() && (
+        {!hasUnread && task.notes && task.notes.trim() && (
           <span className="flex-shrink-0 w-2 h-2 rounded-full bg-emerald-400" title="Has notes" />
         )}
 

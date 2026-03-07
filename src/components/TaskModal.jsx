@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import useStore from '../store'
+import NoteThread from './NoteThread'
 
 const PRIORITIES = [
   { value: null,     label: 'None' },
@@ -33,6 +34,9 @@ export default function TaskModal({ task, onClose }) {
   const isMobile = window.innerWidth < 768
   useEffect(() => { if (!isMobile) titleRef.current?.focus() }, [])
 
+  // Resolve owner UID for Firebase message paths
+  const ownerUid = useStore((s) => s.user?.uid)
+
   const handleSave = () => {
     if (title.trim()) {
       // Auto-set bucket based on due date
@@ -49,23 +53,7 @@ export default function TaskModal({ task, onClose }) {
         else finalBucket = 'someday'
       }
       updateTask(task.id, { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null })
-
-      // @nico detection — send to Brain Inbox with deep link
-      if (notes.trim().toLowerCase().startsWith('@nico')) {
-        const message = notes.trim().slice(5).trim()
-        const taskUrl = `https://things-app-gamma.vercel.app/?task=${task.id}`
-        const preview = message.length > 150 ? message.slice(0, 150).trim() + '…' : message
-        const payload = `[B Things] ${title.trim()}\n${preview}\n→ ${taskUrl}`
-        console.log('[B Things] @nico detected, sending to Brain Inbox:', { project: 'B Things', summary: payload })
-        fetch('/api/notify-nico', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: 'B Things', summary: payload }),
-        })
-          .then((r) => r.json())
-          .then((data) => console.log('[B Things] Brain Inbox response:', data))
-          .catch((err) => console.error('[B Things] Brain Inbox notify failed:', err))
-      }
+      // @mention notifications are handled by NoteThread on message send — not here
     }
     onClose()
   }
@@ -217,13 +205,27 @@ export default function TaskModal({ task, onClose }) {
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add notes… @nico to notify Nico"
-                rows={4}
+                placeholder="Add notes…"
+                rows={1}
                 className="w-full text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 resize-none"
+                style={{ minHeight: '36px', maxHeight: '200px' }}
+                onInput={(e) => {
+                  e.target.style.height = '36px'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
+                }}
               />
-              {notes.trim().toLowerCase().startsWith('@nico') && (
-                <p className="text-xs text-amber-600 mt-1">Will notify Nico's Brain Inbox on save</p>
-              )}
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex items-start gap-3">
+            <label className="text-sm text-gray-400 w-20 flex-shrink-0 mt-2">Messages</label>
+            <div className="flex-1">
+              <NoteThread
+                ownerUid={ownerUid}
+                taskId={task.id}
+                taskTitle={title || task.title || 'Untitled'}
+              />
             </div>
           </div>
         </div>

@@ -8,6 +8,9 @@ import {
   deleteDoc,
   onSnapshot,
   writeBatch,
+  addDoc,
+  query,
+  orderBy,
 } from 'firebase/firestore'
 import {
   getAuth,
@@ -108,4 +111,44 @@ export async function getOwnerUid() {
 /** Register a viewer so Firestore rules allow them to read. */
 export function registerViewer(ownerUid, viewerUid) {
   return setDoc(doc(db, 'users', ownerUid, 'viewers', viewerUid), { granted: true })
+}
+
+// ── Message thread helpers (NoteThread) ─────────────────────────
+
+/** Subscribe to messages on a task in real time. Returns unsubscribe fn. */
+export function subscribeMessages(uid, taskId, callback) {
+  const q = query(
+    collection(db, 'users', uid, 'tasks', taskId, 'messages'),
+    orderBy('timestamp', 'asc'),
+  )
+  return onSnapshot(q, (snap) => {
+    const msgs = []
+    snap.forEach((d) => msgs.push({ id: d.id, ...d.data() }))
+    callback(msgs)
+  })
+}
+
+/** Add a message to a task's message thread. */
+export function addMessage(uid, taskId, msg) {
+  return addDoc(collection(db, 'users', uid, 'tasks', taskId, 'messages'), msg)
+}
+
+/** Update card-level message metadata (for unread indicators). */
+export function updateTaskMsgMeta(uid, taskId, authorEmail) {
+  return setDoc(doc(db, 'users', uid, 'tasks', taskId), {
+    _msgMeta: {
+      lastAt: Date.now(),
+      lastBy: authorEmail,
+      readBy: { [authorEmail.replace(/\./g, '_')]: true },
+    },
+  }, { merge: true })
+}
+
+/** Mark task messages as read for a given user email. */
+export function markTaskMsgMetaRead(uid, taskId, email) {
+  return setDoc(doc(db, 'users', uid, 'tasks', taskId), {
+    _msgMeta: {
+      readBy: { [email.replace(/\./g, '_')]: true },
+    },
+  }, { merge: true })
 }
