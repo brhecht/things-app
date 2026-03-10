@@ -38,32 +38,35 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    const { title, project, bucket } = req.body
+    const { title, project, projectId: directProjectId, bucket, notes, dueDate } = req.body
 
     if (!title || typeof title !== 'string') {
       return res.status(400).json({ error: 'Missing "title" field' })
     }
 
-    // Resolve project name to ID (case-insensitive), default to "unassigned"
+    // Resolve project: direct projectId takes priority, then name lookup, then "unassigned"
     let projectId = 'unassigned'
-    if (project) {
+    if (directProjectId) {
+      projectId = directProjectId
+    } else if (project) {
       projectId = PROJECT_MAP[project.toLowerCase()] || 'unassigned'
     }
 
     // Build the task
-    const taskId = `slack-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const taskId = `eddy-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const task = {
       id: taskId,
       title: title.trim(),
       projectId,
       bucket: bucket || 'inbox',
       priority: null,
-      notes: '',
+      notes: notes || '',
       tags: [],
       starred: false,
       completed: false,
       sortWeight: 0,
       createdAt: Date.now(),
+      ...(dueDate ? { dueDate } : {}),
     }
 
     // Write to Firestore
