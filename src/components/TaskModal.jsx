@@ -31,8 +31,17 @@ export default function TaskModal({ task, onClose }) {
   const [dueDate,   setDueDate]   = useState(task.dueDate || '')
 
   const titleRef = useRef(null)
+  const notesRef = useRef(null)
   const isMobile = window.innerWidth < 768
   useEffect(() => { if (!isMobile) titleRef.current?.focus() }, [])
+
+  // Auto-expand notes textarea on mount
+  useEffect(() => {
+    if (notesRef.current) {
+      notesRef.current.style.height = '36px'
+      notesRef.current.style.height = notesRef.current.scrollHeight + 'px'
+    }
+  }, [])
 
   // Resolve owner UID for Firebase message paths
   const ownerUid = useStore((s) => s.user?.uid)
@@ -203,15 +212,16 @@ export default function TaskModal({ task, onClose }) {
             <label className="text-sm text-gray-400 w-20 flex-shrink-0 mt-2">Notes</label>
             <div className="flex-1">
               <textarea
+                ref={notesRef}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Add notes…"
                 rows={1}
                 className="w-full text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400 resize-none"
-                style={{ minHeight: '36px', maxHeight: '200px' }}
+                style={{ minHeight: '36px' }}
                 onInput={(e) => {
                   e.target.style.height = '36px'
-                  e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'
+                  e.target.style.height = e.target.scrollHeight + 'px'
                 }}
               />
             </div>
