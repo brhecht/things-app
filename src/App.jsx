@@ -103,8 +103,8 @@ export default function App() {
     return (
       <div className="flex flex-col h-screen bg-gray-50 font-sans antialiased" style={{ touchAction: 'manipulation' }}>
         {isViewer && (
-          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-700 text-center pt-[env(safe-area-inset-top)]">
-            Viewing Brian's tasks — tap any task to message
+          <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-sm text-blue-700 text-center pt-[env(safe-area-inset-top)]">
+            Brian's workspace
           </div>
         )}
 
@@ -145,7 +145,7 @@ export default function App() {
         </main>
 
         {/* Quick add + bottom nav */}
-        {!isViewer && mobileTab !== 'completed' && <MobileQuickAdd defaultBucket={quickAddBucket} />}
+        {mobileTab !== 'completed' && <MobileQuickAdd defaultBucket={quickAddBucket} />}
         <MobileBottomNav activeTab={mobileTab} onTabChange={setMobileTab} />
 
         {/* Deep-link task modal */}
@@ -178,8 +178,8 @@ export default function App() {
       <Sidebar filters={filters} setFilters={setFilters} isOpen={sidebarOpen} onToggle={() => setSidebarOpen(o => !o)} />
       <main className="flex-1 overflow-hidden flex flex-col">
         {isViewer && (
-          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-700 text-center">
-            Viewing Brian's tasks — click any task to message
+          <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 text-sm text-blue-700 text-center">
+            Brian's workspace
           </div>
         )}
         {/* View toggle */}

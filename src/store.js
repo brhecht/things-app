@@ -19,7 +19,7 @@ import {
 
 // ── Sharing config ──────────────────────────────────────────────
 const OWNER_EMAIL = 'brhnyc1970@gmail.com'
-const ALLOWED_VIEWERS = ['nico@humbleconviction.com']
+const ALLOWED_COLLABORATORS = ['nico@humbleconviction.com', 'nmejiawork@gmail.com']
 
 let counter = 1
 const uid = () => `id-${Date.now()}-${counter++}`
@@ -60,7 +60,8 @@ const useStore = create((set, get) => ({
   // ── Auth state ────────────────────────────────────────────────
   user: null,
   authLoading: true,
-  isViewer: false,   // true when a viewer is looking at the owner's data
+  isViewer: false,   // true when a collaborator is looking at the owner's data
+  dataUid: null,     // the UID whose Firestore data we read/write (owner's UID for collaborators)
 
   // ── Data ──────────────────────────────────────────────────────
   projects: [],
@@ -86,7 +87,7 @@ const useStore = create((set, get) => ({
     if (_unsubTasks) _unsubTasks()
     if (_unsubProjects) _unsubProjects()
     await logOut()
-    set({ user: null, isViewer: false, tasks: [], projects: [], selectedProjectId: null, _unsubTasks: null, _unsubProjects: null })
+    set({ user: null, isViewer: false, dataUid: null, tasks: [], projects: [], selectedProjectId: null, _unsubTasks: null, _unsubProjects: null })
   },
 
   /** Call once at app startup to listen to auth changes. */
@@ -96,29 +97,29 @@ const useStore = create((set, get) => ({
         const email = firebaseUser.email?.toLowerCase()
 
         if (email === OWNER_EMAIL) {
-          // Owner: save UID for viewers to find, then sync own data
+          // Owner: save UID for collaborators to find, then sync own data
           await saveOwnerUid(firebaseUser.uid)
-          set({ user: firebaseUser, authLoading: false, isViewer: false })
+          set({ user: firebaseUser, authLoading: false, isViewer: false, dataUid: firebaseUser.uid })
           get()._startSync(firebaseUser.uid)
 
-        } else if (ALLOWED_VIEWERS.includes(email)) {
-          // Viewer: find the owner's UID and subscribe to their data (read-only)
+        } else if (ALLOWED_COLLABORATORS.includes(email)) {
+          // Collaborator: find the owner's UID and subscribe to their data (full read-write)
           const ownerUid = await getOwnerUid()
           if (ownerUid) {
             await registerViewer(ownerUid, firebaseUser.uid)
-            set({ user: firebaseUser, authLoading: false, isViewer: true })
+            set({ user: firebaseUser, authLoading: false, isViewer: true, dataUid: ownerUid })
             get()._startSync(ownerUid)
           } else {
-            set({ user: firebaseUser, authLoading: false, isViewer: true })
+            set({ user: firebaseUser, authLoading: false, isViewer: true, dataUid: null })
           }
 
         } else {
           // Unknown user: reject access
           await logOut()
-          set({ user: null, authLoading: false, isViewer: false })
+          set({ user: null, authLoading: false, isViewer: false, dataUid: null })
         }
       } else {
-        set({ user: null, authLoading: false, isViewer: false, tasks: [], projects: [] })
+        set({ user: null, authLoading: false, isViewer: false, dataUid: null, tasks: [], projects: [] })
       }
     })
   },
@@ -171,42 +172,39 @@ const useStore = create((set, get) => ({
 
     const unsubTasks = subscribeTasks(userId, (tasks) => {
       // Auto-fix tasks with no project — assign to "unassigned"
-      const { isViewer } = get()
-      if (!isViewer) {
-        tasks.forEach((t) => {
-          if (!t.projectId) {
-            upsertTask(userId, { ...t, projectId: 'unassigned' })
-          }
-        })
+      tasks.forEach((t) => {
+        if (!t.projectId) {
+          upsertTask(userId, { ...t, projectId: 'unassigned' })
         }
+      })
       set({ tasks })
     })
 
     set({ _unsubTasks: unsubTasks, _unsubProjects: unsubProjects })
   },
 
-  // ── Project actions (disabled for viewers) ─────────────────────
+  // ── Project actions ──────────────────────────────────────────
   addProject: (name) => {
-    const { user, isViewer } = get()
-    if (!user || isViewer) return
+    const { user, dataUid } = get()
+    if (!user || !dataUid) return
     const project = { id: uid(), name }
-    upsertProject(user.uid, project)
+    upsertProject(dataUid, project)
     // Firestore listener will update the store
   },
 
   renameProject: (id, name) => {
-    const { user, isViewer, projects } = get()
-    if (!user || isViewer) return
+    const { user, dataUid, projects } = get()
+    if (!user || !dataUid) return
     const proj = projects.find((p) => p.id === id)
-    if (proj) upsertProject(user.uid, { ...proj, name })
+    if (proj) upsertProject(dataUid, { ...proj, name })
   },
 
   deleteProject: (id) => {
-    const { user, isViewer, tasks, selectedProjectId } = get()
-    if (!user || isViewer) return
-    removeProject(user.uid, id)
+    const { user, dataUid, tasks, selectedProjectId } = get()
+    if (!user || !dataUid) return
+    removeProject(dataUid, id)
     // Also delete all tasks in that project
-    tasks.filter((t) => t.projectId === id).forEach((t) => removeTask(user.uid, t.id))
+    tasks.filter((t) => t.projectId === id).forEach((t) => removeTask(dataUid, t.id))
     if (selectedProjectId === id) set({ selectedProjectId: null })
   },
 
@@ -217,17 +215,15 @@ const useStore = create((set, get) => ({
   },
 
   undo: () => {
-    const { user, isViewer, _undoStack } = get()
-    if (!user || isViewer || _undoStack.length === 0) return
+    const { user, dataUid, _undoStack } = get()
+    if (!user || !dataUid || _undoStack.length === 0) return
     const stack = [..._undoStack]
     const entry = stack.pop()
     set({ _undoStack: stack })
     if (entry.type === 'delete') {
-      // Re-create the deleted task
-      upsertTask(user.uid, entry.snapshot)
+      upsertTask(dataUid, entry.snapshot)
     } else {
-      // Restore previous state
-      upsertTask(user.uid, entry.snapshot)
+      upsertTask(dataUid, entry.snapshot)
     }
     set({ _undoToast: `Undid: ${entry.label}` })
     setTimeout(() => set({ _undoToast: null }), 2000)
@@ -235,10 +231,10 @@ const useStore = create((set, get) => ({
 
   dismissToast: () => set({ _undoToast: null }),
 
-  // ── Task actions (disabled for viewers) ────────────────────────
+  // ── Task actions ─────────────────────────────────────────────
   addTask: (title, projectId, bucket = 'today') => {
-    const { user, isViewer } = get()
-    if (!user || isViewer) return null
+    const { user, dataUid } = get()
+    if (!user || !dataUid) return null
     const task = {
       id: uid(),
       title,
@@ -251,13 +247,13 @@ const useStore = create((set, get) => ({
       completed: false,
       createdAt: Date.now(),
     }
-    upsertTask(user.uid, task)
+    upsertTask(dataUid, task)
     return task
   },
 
   updateTask: (id, updates) => {
-    const { user, isViewer, tasks } = get()
-    if (!user || isViewer) return
+    const { user, dataUid, tasks } = get()
+    if (!user || !dataUid) return
     const existing = tasks.find((t) => t.id === id)
     if (existing) {
       // Determine a human-readable label for the undo toast
@@ -268,37 +264,37 @@ const useStore = create((set, get) => ({
       else if ('bucket' in updates) label = 'move'
       else if ('projectId' in updates) label = 'reassign'
       get()._pushUndo('update', { ...existing }, label)
-      upsertTask(user.uid, { ...existing, ...updates })
+      upsertTask(dataUid, { ...existing, ...updates })
     }
   },
 
   deleteTask: (id) => {
-    const { user, isViewer, tasks } = get()
-    if (!user || isViewer) return
+    const { user, dataUid, tasks } = get()
+    if (!user || !dataUid) return
     const existing = tasks.find((t) => t.id === id)
     if (existing) get()._pushUndo('delete', { ...existing }, 'delete')
-    removeTask(user.uid, id)
+    removeTask(dataUid, id)
   },
 
   moveTask: (id, bucket) => {
-    const { user, isViewer, tasks } = get()
-    if (!user || isViewer) return
+    const { user, dataUid, tasks } = get()
+    if (!user || !dataUid) return
     const existing = tasks.find((t) => t.id === id)
     if (existing) {
       get()._pushUndo('update', { ...existing }, 'move')
-      upsertTask(user.uid, { ...existing, bucket })
+      upsertTask(dataUid, { ...existing, bucket })
     }
   },
 
   reorderProjects: (fromIndex, toIndex) => {
-    const { user, isViewer, projects } = get()
-    if (!user || isViewer) return
+    const { user, dataUid, projects } = get()
+    if (!user || !dataUid) return
     const reordered = [...projects]
     const [moved] = reordered.splice(fromIndex, 1)
     reordered.splice(toIndex, 0, moved)
     // Assign new sortOrder values and persist each
     reordered.forEach((proj, i) => {
-      upsertProject(user.uid, { ...proj, sortOrder: i })
+      upsertProject(dataUid, { ...proj, sortOrder: i })
     })
     // Optimistically update local state
     set({ projects: reordered })
