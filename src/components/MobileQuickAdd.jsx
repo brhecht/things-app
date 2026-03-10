@@ -2,13 +2,11 @@ import { useState } from 'react'
 import useStore from '../store'
 
 export default function MobileQuickAdd({ defaultBucket = 'inbox' }) {
-  const { addTask, projects, isViewer } = useStore()
+  const { addTask, projects } = useStore()
   const [title, setTitle] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [bucket, setBucket] = useState(defaultBucket)
   const [projectId, setProjectId] = useState('unassigned')
-
-  if (isViewer) return null
 
   const handleSubmit = (e) => {
     e.preventDefault()

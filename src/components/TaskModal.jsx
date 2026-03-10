@@ -43,8 +43,8 @@ export default function TaskModal({ task, onClose }) {
     }
   }, [])
 
-  // Resolve owner UID for Firebase message paths
-  const ownerUid = useStore((s) => s.user?.uid)
+  // Resolve data UID for Firebase paths (Brian's UID for collaborators)
+  const ownerUid = useStore((s) => s.dataUid)
 
   const handleSave = () => {
     if (title.trim()) {
