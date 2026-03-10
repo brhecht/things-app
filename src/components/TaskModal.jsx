@@ -122,9 +122,10 @@ export default function TaskModal({ task, onClose }) {
             className="flex-1 text-xl font-semibold text-gray-800 outline-none placeholder-gray-300"
             placeholder="Task title"
           />
-          {/* Done checkbox */}
+          {/* Done checkbox — Enter handled by global save, prevent native button activation */}
           <button
             onClick={() => setCompleted((c) => !c)}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
             className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
               completed
                 ? 'bg-blue-600 border-blue-600 text-white'
@@ -138,13 +139,14 @@ export default function TaskModal({ task, onClose }) {
               </svg>
             )}
           </button>
-          {/* Star toggle */}
+          {/* Star toggle — Enter handled by global save, prevent native button activation */}
           <button
             onClick={() => {
               const next = !starred
               setStarred(next)
               if (next) setPriority('high')
             }}
+            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
             className={`flex-shrink-0 text-xl leading-none transition-colors ${
               starred ? 'text-yellow-400' : 'text-gray-300 hover:text-gray-400'
             }`}
