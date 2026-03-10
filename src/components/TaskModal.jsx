@@ -29,6 +29,8 @@ export default function TaskModal({ task, onClose }) {
   const [projectId, setProjectId] = useState(task.projectId)
   const [bucket,    setBucket]    = useState(task.bucket)
   const [dueDate,   setDueDate]   = useState(task.dueDate || '')
+  const [starred,   setStarred]   = useState(task.starred || false)
+  const [completed, setCompleted] = useState(task.completed || false)
 
   const titleRef = useRef(null)
   const notesRef = useRef(null)
@@ -61,7 +63,10 @@ export default function TaskModal({ task, onClose }) {
         else if (diffDays <= 7) finalBucket = 'soon'
         else finalBucket = 'someday'
       }
-      updateTask(task.id, { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null })
+      const updates = { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, starred, completed }
+      // Match TaskCard behavior: starring sets sortWeight for ordering
+      if (starred && !task.starred) updates.sortWeight = Date.now()
+      updateTask(task.id, updates)
       // @mention notifications are handled by NoteThread on message send — not here
     }
     onClose()
@@ -97,16 +102,46 @@ export default function TaskModal({ task, onClose }) {
         className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Title */}
-        <div className="px-6 pt-6 pb-4 border-b border-gray-100">
+        {/* Title + Done + Star */}
+        <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex items-center gap-3">
           <input
             ref={titleRef}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
-            className="w-full text-xl font-semibold text-gray-800 outline-none placeholder-gray-300"
+            className="flex-1 text-xl font-semibold text-gray-800 outline-none placeholder-gray-300"
             placeholder="Task title"
           />
+          {/* Done checkbox */}
+          <button
+            onClick={() => setCompleted((c) => !c)}
+            className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+              completed
+                ? 'bg-blue-600 border-blue-600 text-white'
+                : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50'
+            }`}
+            title={completed ? 'Mark incomplete' : 'Mark complete'}
+          >
+            {completed && (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+          </button>
+          {/* Star toggle */}
+          <button
+            onClick={() => {
+              const next = !starred
+              setStarred(next)
+              if (next) setPriority('high')
+            }}
+            className={`flex-shrink-0 text-xl leading-none transition-colors ${
+              starred ? 'text-yellow-400' : 'text-gray-300 hover:text-gray-400'
+            }`}
+            title={starred ? 'Unstar' : 'Star'}
+          >
+            {starred ? '★' : '☆'}
+          </button>
         </div>
 
         {/* Fields */}
