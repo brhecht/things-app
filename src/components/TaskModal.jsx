@@ -80,6 +80,17 @@ export default function TaskModal({ task, onClose }) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Backspace') handleDelete()
       // ⌘+Enter or Ctrl+Enter saves from anywhere
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleSave() }
+      // Plain Enter saves unless in notes, messages, or tag input
+      if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+        const el = document.activeElement
+        const tag = el?.tagName?.toLowerCase()
+        // Skip: textareas (notes, messages), inputs inside NoteThread, tag input
+        if (tag === 'textarea') return
+        if (el?.closest?.('[data-notethread]')) return
+        if (el === document.querySelector('[placeholder="Type tag, press Enter"]')) return
+        e.preventDefault()
+        handleSave()
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -108,7 +119,6 @@ export default function TaskModal({ task, onClose }) {
             ref={titleRef}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
             className="flex-1 text-xl font-semibold text-gray-800 outline-none placeholder-gray-300"
             placeholder="Task title"
           />
@@ -152,7 +162,6 @@ export default function TaskModal({ task, onClose }) {
             <select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
               className="flex-1 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400"
             >
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -165,7 +174,6 @@ export default function TaskModal({ task, onClose }) {
             <select
               value={bucket}
               onChange={(e) => setBucket(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
               className="flex-1 text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400"
             >
               {BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
@@ -180,7 +188,6 @@ export default function TaskModal({ task, onClose }) {
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave() } }}
                 className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-400"
               />
               {dueDate && (

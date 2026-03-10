@@ -171,7 +171,7 @@ export default function NoteThread({ ownerUid, taskId, taskTitle }) {
   const isOwnMessage = (msg) => msg.authorEmail === user?.email
 
   return (
-    <div className="flex flex-col" style={{ maxHeight: '320px' }}>
+    <div className="flex flex-col" data-notethread style={{ maxHeight: '320px' }}>
       {/* Message thread — only render if there are messages */}
       {messages.length > 0 && (
         <div
