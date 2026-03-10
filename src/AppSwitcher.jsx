@@ -6,7 +6,6 @@ const APPS = [
   { key: 'content',   label: 'B Content',    icon: 'C', url: 'https://content-calendar-nine.vercel.app', color: '#E6A817' },
   { key: 'people',    label: 'B People',     icon: 'P', url: 'https://b-people.vercel.app',             color: '#E07A5F' },
   { key: 'marketing', label: 'B Marketing',  icon: 'M', url: 'https://b-marketing.vercel.app',          color: '#D4637A' },
-  { key: 'funnel',    label: 'HC Funnel',    icon: 'F', url: 'https://hc-funnel.vercel.app',            color: '#F4845F' },
 ]
 
 const MOBILE_BP = 768
