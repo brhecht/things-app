@@ -3,7 +3,7 @@ import { subscribeMessages, addMessage, updateTaskMsgMeta, markTaskMsgMetaRead }
 import { getUserByEmail, getUserByHandle, parseMentions, getAllHandles } from '../users'
 import useStore from '../store'
 
-const NOTIFY_ENDPOINT = '/api/notify-nico'
+const NOTIFY_ENDPOINT = '/api/notify'
 
 /**
  * NoteThread — iMessage/Slack-style chat thread for a task.

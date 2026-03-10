@@ -104,7 +104,7 @@ export default function App() {
       <div className="flex flex-col h-screen bg-gray-50 font-sans antialiased" style={{ touchAction: 'manipulation' }}>
         {isViewer && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-700 text-center pt-[env(safe-area-inset-top)]">
-            View only — you're viewing Brian's tasks
+            Viewing Brian's tasks — tap any task to message
           </div>
         )}
 
@@ -179,7 +179,7 @@ export default function App() {
       <main className="flex-1 overflow-hidden flex flex-col">
         {isViewer && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-700 text-center">
-            View only — you're viewing Brian's tasks
+            Viewing Brian's tasks — click any task to message
           </div>
         )}
         {/* View toggle */}
