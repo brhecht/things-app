@@ -4,12 +4,12 @@ import TaskCard from './TaskCard'
 import TaskModal from './TaskModal'
 
 const BUCKETS = [
-  { id: 'inbox',    label: 'Inbox',    accent: 'text-orange-600', border: 'border-orange-200', dropBg: 'bg-orange-50', count: 'bg-orange-100 text-orange-700' },
-  { id: 'today',    label: 'Today',    accent: 'text-blue-600',   border: 'border-blue-200',   dropBg: 'bg-blue-50',   count: 'bg-blue-100 text-blue-700' },
-  { id: 'waiting',  label: 'Waiting / Delegated', accent: 'text-amber-600', border: 'border-amber-200', dropBg: 'bg-amber-50', count: 'bg-amber-100 text-amber-700' },
-  { id: 'tomorrow', label: 'Tomorrow', accent: 'text-indigo-600', border: 'border-indigo-200', dropBg: 'bg-indigo-50', count: 'bg-indigo-100 text-indigo-700' },
-  { id: 'soon',     label: 'This Week',     accent: 'text-violet-600', border: 'border-violet-200', dropBg: 'bg-violet-50', count: 'bg-violet-100 text-violet-700' },
-  { id: 'someday',  label: 'Later',  accent: 'text-gray-500',   border: 'border-gray-200',   dropBg: 'bg-gray-100',  count: 'bg-gray-100 text-gray-500' },
+  { id: 'inbox',    label: 'Inbox',    accent: 'text-orange-600', border: 'border-orange-200', dropBg: 'bg-orange-50', count: 'bg-orange-100 text-orange-700', defaultFlex: 1.4 },
+  { id: 'today',    label: 'Today',    accent: 'text-blue-600',   border: 'border-blue-200',   dropBg: 'bg-blue-50',   count: 'bg-blue-100 text-blue-700',     defaultFlex: 1.4 },
+  { id: 'waiting',  label: 'Waiting / Delegated', accent: 'text-amber-600', border: 'border-amber-200', dropBg: 'bg-amber-50', count: 'bg-amber-100 text-amber-700', defaultFlex: 1.4 },
+  { id: 'tomorrow', label: 'Tomorrow', accent: 'text-indigo-600', border: 'border-indigo-200', dropBg: 'bg-indigo-50', count: 'bg-indigo-100 text-indigo-700', defaultFlex: 1.4 },
+  { id: 'soon',     label: 'This Week',     accent: 'text-violet-600', border: 'border-violet-200', dropBg: 'bg-violet-50', count: 'bg-violet-100 text-violet-700', defaultFlex: 0.7 },
+  { id: 'someday',  label: 'Later',  accent: 'text-gray-500',   border: 'border-gray-200',   dropBg: 'bg-gray-100',  count: 'bg-gray-100 text-gray-500',     defaultFlex: 0.7 },
 ]
 
 const PROJECT_COLORS = {
@@ -267,7 +267,7 @@ export default function KanbanBoard({ filters }) {
             if (bucket.id === 'inbox' && visibleTasks.filter((t) => t.bucket === 'inbox').length === 0) return false
             return true
           }).map((bucket, i, arr) => (
-            <div key={bucket.id} data-col-wrapper className="flex" style={{ flex: colWidths[bucket.id] ? `0 0 ${colWidths[bucket.id]}px` : '1 1 0%', minWidth: 180 }}>
+            <div key={bucket.id} data-col-wrapper className="flex" style={{ flex: colWidths[bucket.id] ? `0 0 ${colWidths[bucket.id]}px` : `${bucket.defaultFlex} 1 0%`, minWidth: 180 }}>
               {i > 0 && (
                 <ResizeHandle bucketId={arr[i - 1].id} nextBucketId={bucket.id} colWidths={colWidths} setColWidths={setColWidths} />
               )}
