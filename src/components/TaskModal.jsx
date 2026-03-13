@@ -12,7 +12,7 @@ const PRIORITIES = [
 const BUCKETS = [
   { value: 'inbox',    label: 'Inbox' },
   { value: 'today',    label: 'Today' },
-  { value: 'waiting',  label: 'Waiting / Delegated' },
+  { value: 'waiting',  label: 'Wait / Delegate' },
   { value: 'tomorrow', label: 'Tomorrow' },
   { value: 'soon',     label: 'This Week' },
   { value: 'someday',  label: 'Later' },
