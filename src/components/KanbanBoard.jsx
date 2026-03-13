@@ -263,7 +263,7 @@ export default function KanbanBoard({ filters }) {
 
       {/* Board */}
       <div className="flex-1 overflow-auto p-8">
-        <div className="flex min-h-full">
+        <div className="flex min-h-full w-max">
           {BUCKETS.filter((bucket) => {
             // Hide inbox column when it has no tasks
             if (bucket.id === 'inbox' && visibleTasks.filter((t) => t.bucket === 'inbox').length === 0) return false
