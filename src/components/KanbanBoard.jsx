@@ -233,7 +233,7 @@ export default function KanbanBoard({ filters }) {
   const { tasks, projects, selectedProjectId } = useStore()
   const [selectedTask, setSelectedTask] = useState(null)
   const [colWidths, setColWidths] = useState({
-    inbox: 260, today: 260, waiting: 260, tomorrow: 260, soon: 160, someday: 160,
+    inbox: 260, today: 260, waiting: 260, tomorrow: 260, soon: 260, someday: 260,
   })
 
   // Base visibility: project filter + not completed
