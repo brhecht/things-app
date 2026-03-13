@@ -103,7 +103,7 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
         }}
         className={`flex items-center justify-between mb-4 pb-3 border-b-2 ${bucket.border} rounded-t-lg transition-colors ${headerOver ? `${bucket.dropBg} ring-2 ring-offset-1 ring-current ${bucket.accent}` : ''}`}
       >
-        <h2 className={`font-semibold text-sm uppercase tracking-widest ${bucket.accent}`}>{bucket.label}</h2>
+        <h2 className={`font-semibold text-sm uppercase tracking-widest whitespace-nowrap ${bucket.accent}`}>{bucket.label}</h2>
         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${bucket.count}`}>{tasks.length}</span>
       </div>
 
