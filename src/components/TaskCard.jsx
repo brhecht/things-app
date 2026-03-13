@@ -65,7 +65,7 @@ export default function TaskCard({ task, onClick }) {
         />
 
         {/* Title */}
-        <p className="flex-1 text-sm text-gray-800 font-medium leading-snug truncate">{task.title}</p>
+        <p className="flex-1 text-sm text-gray-800 font-medium leading-snug">{task.title}</p>
 
         {/* Star */}
         <button
