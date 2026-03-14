@@ -37,6 +37,40 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
   const isMobile = window.innerWidth < 768
   useEffect(() => { if (!isMobile) titleRef.current?.focus() }, [])
 
+  // Swipe-down-to-close for mobile
+  const [dragY, setDragY] = useState(0)
+  const dragStartY = useRef(0)
+  const dragging = useRef(false)
+  const modalRef = useRef(null)
+
+  const handleDragStart = (e) => {
+    // Only initiate drag from the handle area itself
+    dragStartY.current = e.touches[0].clientY
+    dragging.current = false
+  }
+
+  const handleDragMove = (e) => {
+    const dy = e.touches[0].clientY - dragStartY.current
+    if (dy > 0) {
+      dragging.current = true
+      setDragY(dy)
+      e.preventDefault()
+    }
+  }
+
+  const handleDragEnd = () => {
+    if (dragging.current && dragY > 120) {
+      // Dismiss — slide fully down then close
+      setDragY(window.innerHeight)
+      setTimeout(() => {
+        completedMode ? onClose() : handleSave()
+      }, 150)
+    } else {
+      setDragY(0)
+    }
+    dragging.current = false
+  }
+
   // Auto-expand notes textarea on mount
   useEffect(() => {
     if (notesRef.current) {
@@ -110,9 +144,26 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
       onClick={completedMode ? onClose : handleSave}
     >
       <div
+        ref={modalRef}
         className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
+        style={{
+          transform: dragY > 0 ? `translateY(${dragY}px)` : undefined,
+          transition: dragging.current ? 'none' : 'transform 0.2s ease-out',
+        }}
       >
+        {/* Mobile drag handle */}
+        {isMobile && (
+          <div
+            className="flex justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing"
+            onTouchStart={handleDragStart}
+            onTouchMove={handleDragMove}
+            onTouchEnd={handleDragEnd}
+          >
+            <div className="w-10 h-1 rounded-full bg-gray-300" />
+          </div>
+        )}
+
         {/* Title + Done + Star */}
         <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex items-center gap-3">
           <input

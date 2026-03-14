@@ -36,25 +36,37 @@ const BUCKET_ORDER = ['inbox', 'today', 'waiting', 'tomorrow', 'soon', 'someday'
 function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects }) {
   const startX = useRef(0)
   const startY = useRef(0)
+  const startTime = useRef(0)
   const swiping = useRef(false)
+  const scrolling = useRef(false)
   const [offset, setOffset] = useState(0)
   const [revealed, setRevealed] = useState(null) // 'left' | 'right' | null — locks open after swipe
 
   const SNAP_THRESHOLD = 60  // how far to swipe before it snaps open
   const REVEAL_WIDTH = 80    // how wide the revealed action button is
+  const TAP_MOVE_THRESHOLD = 10  // max px movement to still count as tap
+  const TAP_TIME_THRESHOLD = 300 // max ms to still count as tap
 
   const handleTouchStart = (e) => {
     startX.current = e.touches[0].clientX
     startY.current = e.touches[0].clientY
+    startTime.current = Date.now()
     swiping.current = false
+    scrolling.current = false
   }
 
   const handleTouchMove = (e) => {
     const dx = e.touches[0].clientX - startX.current
     const dy = e.touches[0].clientY - startY.current
 
-    // If vertical motion > horizontal on first move, let scroll happen
-    if (!swiping.current && Math.abs(dy) > Math.abs(dx)) return
+    // If vertical motion > horizontal on first move, it's a scroll — don't open card
+    if (!swiping.current && !scrolling.current && Math.abs(dy) > Math.abs(dx)) {
+      scrolling.current = true
+      return
+    }
+    // If already determined to be scrolling, let the browser handle it
+    if (scrolling.current) return
+
     swiping.current = true
 
     // If already revealed, allow swiping back
@@ -69,15 +81,24 @@ function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects }
     }
   }
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e) => {
+    const endX = e.changedTouches[0].clientX
+    const endY = e.changedTouches[0].clientY
+    const totalMove = Math.sqrt(
+      Math.pow(endX - startX.current, 2) + Math.pow(endY - startY.current, 2)
+    )
+    const elapsed = Date.now() - startTime.current
+
     if (!swiping.current) {
-      // It was a tap
-      if (revealed) {
-        // If revealed, tap on card area closes it
-        setRevealed(null)
-        setOffset(0)
-      } else {
-        onTap()
+      // Only count as tap if finger barely moved AND was quick
+      const isTap = totalMove < TAP_MOVE_THRESHOLD && elapsed < TAP_TIME_THRESHOLD
+      if (isTap) {
+        if (revealed) {
+          setRevealed(null)
+          setOffset(0)
+        } else {
+          onTap()
+        }
       }
       return
     }
