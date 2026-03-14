@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import useStore from '../store'
+import TaskModal from './TaskModal'
 
 const PROJECT_COLORS = {
   'hc-admin':         'bg-blue-100 text-blue-700',
@@ -17,6 +18,7 @@ const PROJECT_COLORS = {
 
 export default function CompletedView({ onBack }) {
   const { tasks, projects, updateTask, isViewer } = useStore()
+  const [selectedTask, setSelectedTask] = useState(null)
   const completedTasks = tasks
     .filter(t => t.completed)
     .sort((a, b) => (b.completedAt || b.createdAt || 0) - (a.completedAt || a.createdAt || 0))
@@ -59,12 +61,13 @@ export default function CompletedView({ onBack }) {
           {completedTasks.map(task => (
             <div
               key={task.id}
-              className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-gray-100"
+              className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl border border-gray-100 cursor-pointer hover:border-gray-200 hover:bg-gray-50 transition-colors"
+              onClick={() => setSelectedTask(task)}
             >
               {/* Uncomplete button */}
               {(
                 <button
-                  onClick={() => handleUncomplete(task.id)}
+                  onClick={(e) => { e.stopPropagation(); handleUncomplete(task.id) }}
                   className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 active:bg-blue-600"
                   title="Restore task"
                 >
@@ -95,6 +98,14 @@ export default function CompletedView({ onBack }) {
           )}
         </div>
       </div>
+
+      {selectedTask && (
+        <TaskModal
+          task={tasks.find((t) => t.id === selectedTask.id) || selectedTask}
+          onClose={() => setSelectedTask(null)}
+          completedMode
+        />
+      )}
     </div>
   )
 }

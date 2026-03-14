@@ -18,7 +18,7 @@ const BUCKETS = [
   { value: 'someday',  label: 'Later' },
 ]
 
-export default function TaskModal({ task, onClose }) {
+export default function TaskModal({ task, onClose, completedMode = false }) {
   const { updateTask, deleteTask, projects } = useStore()
 
   const [title,     setTitle]     = useState(task.title)
@@ -76,10 +76,10 @@ export default function TaskModal({ task, onClose }) {
 
   useEffect(() => {
     const handler = (e) => {
-      if (e.key === 'Escape') handleSave()
+      if (e.key === 'Escape') { completedMode ? onClose() : handleSave() }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Backspace') handleDelete()
-      // ⌘+Enter or Ctrl+Enter saves from anywhere
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); handleSave() }
+      // ⌘+Enter or Ctrl+Enter saves from anywhere (no-op in completed mode)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); if (!completedMode) handleSave() }
       // Plain Enter saves unless in notes, messages, or tag input
       if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
         const el = document.activeElement
@@ -107,7 +107,7 @@ export default function TaskModal({ task, onClose }) {
   return (
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-[2px] flex items-end md:items-center justify-center z-50 md:p-4"
-      onClick={handleSave}
+      onClick={completedMode ? onClose : handleSave}
     >
       <div
         className="bg-white rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto"
@@ -296,9 +296,36 @@ export default function TaskModal({ task, onClose }) {
             <button onClick={onClose} className="text-sm text-gray-500 px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors">
               Cancel
             </button>
-            <button onClick={handleSave} className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium">
-              Save <span className="text-blue-200 text-xs ml-1">↵</span>
-            </button>
+            {completedMode ? (
+              <button
+                onClick={() => {
+                  if (title.trim()) {
+                    let finalBucket = bucket
+                    if (dueDate) {
+                      const today = new Date()
+                      today.setHours(0, 0, 0, 0)
+                      const due = new Date(dueDate + 'T00:00:00')
+                      const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24))
+                      if (diffDays <= 0) finalBucket = 'today'
+                      else if (diffDays === 1) finalBucket = 'tomorrow'
+                      else if (diffDays <= 7) finalBucket = 'soon'
+                      else finalBucket = 'someday'
+                    }
+                    const updates = { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, starred, completed: false }
+                    if (starred && !task.starred) updates.sortWeight = Date.now()
+                    updateTask(task.id, updates)
+                  }
+                  onClose()
+                }}
+                className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Move to Incomplete
+              </button>
+            ) : (
+              <button onClick={handleSave} className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                Save <span className="text-blue-200 text-xs ml-1">↵</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
