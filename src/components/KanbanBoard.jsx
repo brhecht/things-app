@@ -47,7 +47,7 @@ function ProjectDropGroup({ proj, bucket, children, onQuickAdd }) {
         <span>{proj.name}</span>
         <button
           onClick={(e) => { e.stopPropagation(); onQuickAdd(proj.id) }}
-          className="opacity-0 group-hover/proj:opacity-100 hover:!opacity-100 ml-2 leading-none text-current hover:scale-110 transition-all"
+          className="ml-2 leading-none text-current opacity-40 hover:opacity-100 hover:scale-110 transition-all"
           title={`Add task to ${proj.name}`}
         >
           +
