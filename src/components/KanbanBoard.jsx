@@ -26,7 +26,7 @@ const PROJECT_COLORS = {
   'unassigned':       'bg-stone-100 text-stone-600',
 }
 
-function ProjectDropGroup({ proj, bucket, children }) {
+function ProjectDropGroup({ proj, bucket, children, onQuickAdd }) {
   const { updateTask } = useStore()
   const [isOver, setIsOver] = useState(false)
 
@@ -41,10 +41,17 @@ function ProjectDropGroup({ proj, bucket, children }) {
         const id = e.dataTransfer.getData('taskId')
         if (id) updateTask(id, { projectId: proj.id, bucket: bucket.id })
       }}
-      className={`rounded-lg transition-all ${isOver ? 'ring-2 ring-blue-400 ring-offset-1 bg-blue-50/30' : ''}`}
+      className={`group/proj rounded-lg transition-all ${isOver ? 'ring-2 ring-blue-400 ring-offset-1 bg-blue-50/30' : ''}`}
     >
-      <div className={`text-xs font-semibold uppercase tracking-wider px-3 py-1.5 rounded-md mb-2 ${PROJECT_COLORS[proj.id] || 'bg-gray-100 text-gray-600'}`}>
-        {proj.name}
+      <div className={`flex items-center justify-between text-xs font-semibold uppercase tracking-wider px-3 py-1.5 rounded-md mb-2 ${PROJECT_COLORS[proj.id] || 'bg-gray-100 text-gray-600'}`}>
+        <span>{proj.name}</span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onQuickAdd(proj.id) }}
+          className="opacity-0 group-hover/proj:opacity-100 hover:!opacity-100 ml-2 leading-none text-current hover:scale-110 transition-all"
+          title={`Add task to ${proj.name}`}
+        >
+          +
+        </button>
       </div>
       {children}
     </div>
@@ -57,6 +64,8 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
   const [newTitle, setNewTitle] = useState('')
   const [newProjectId, setNewProjectId] = useState(selectedProjectId || projects[0]?.id || '')
   const [headerOver, setHeaderOver] = useState(false)
+  const [quickAddProjectId, setQuickAddProjectId] = useState(null)
+  const [quickAddTitle, setQuickAddTitle] = useState('')
 
   const handleAdd = (e) => {
     e.preventDefault()
@@ -120,11 +129,59 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
 
         {/* Project groups — drop on a project group to reassign project */}
         {grouped.map(({ proj, tasks: projTasks }) => (
-          <ProjectDropGroup key={proj.id} proj={proj} bucket={bucket}>
+          <ProjectDropGroup
+            key={proj.id}
+            proj={proj}
+            bucket={bucket}
+            onQuickAdd={(projId) => { setQuickAddProjectId(projId); setQuickAddTitle('') }}
+          >
             <div className="space-y-2">
               {projTasks.map((task) => (
                 <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
               ))}
+              {quickAddProjectId === proj.id && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    if (quickAddTitle.trim()) {
+                      addTask(quickAddTitle.trim(), proj.id, bucket.id)
+                      setQuickAddTitle('')
+                      setQuickAddProjectId(null)
+                    }
+                  }}
+                  className="bg-white rounded-xl border border-blue-200 shadow-sm p-3 space-y-2"
+                >
+                  <input
+                    autoFocus
+                    value={quickAddTitle}
+                    onChange={(e) => setQuickAddTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Escape' && setQuickAddProjectId(null)}
+                    placeholder="Task name…"
+                    className="w-full text-sm outline-none text-gray-700 placeholder-gray-300"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button type="submit" className="text-xs bg-blue-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 font-medium">Add</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (quickAddTitle.trim()) {
+                          const task = addTask(quickAddTitle.trim(), proj.id, bucket.id)
+                          setQuickAddTitle('')
+                          setQuickAddProjectId(null)
+                          if (task) onTaskClick(task)
+                        }
+                      }}
+                      className="p-1 text-gray-400 hover:text-blue-600 transition-colors rounded"
+                      title="Add & open full editor"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                        <path d="M4 2a.75.75 0 0 0-.75.75v1.5a.75.75 0 0 0 1.5 0V3.5h.75a.75.75 0 0 0 0-1.5H4ZM9.75 2.75A.75.75 0 0 1 10.5 2h1.75a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V3.5h-1a.75.75 0 0 1-.75-.75ZM3.25 9.75A.75.75 0 0 1 4 9h1.5a.75.75 0 0 1 0 1.5H4.75v.75a.75.75 0 0 1-1.5 0V9.75ZM10.5 9a.75.75 0 0 0-.75.75v1.5a.75.75 0 0 0 .75.75h1.75a.75.75 0 0 0 .75-.75v-1.5a.75.75 0 0 0-1.5 0v.75h-1A.75.75 0 0 0 10.5 9Z" />
+                      </svg>
+                    </button>
+                    <button type="button" onClick={() => setQuickAddProjectId(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                  </div>
+                </form>
+              )}
             </div>
           </ProjectDropGroup>
         ))}
