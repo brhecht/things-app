@@ -41,35 +41,55 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
   const [dragY, setDragY] = useState(0)
   const dragStartY = useRef(0)
   const dragging = useRef(false)
+  const dragYRef = useRef(0)
   const modalRef = useRef(null)
+  const handleRef = useRef(null)
 
-  const handleDragStart = (e) => {
-    // Only initiate drag from the handle area itself
-    dragStartY.current = e.touches[0].clientY
-    dragging.current = false
-  }
+  // Attach touch listeners with { passive: false } so preventDefault works on mobile
+  useEffect(() => {
+    if (!isMobile) return
+    const handle = handleRef.current
+    if (!handle) return
 
-  const handleDragMove = (e) => {
-    const dy = e.touches[0].clientY - dragStartY.current
-    if (dy > 0) {
-      dragging.current = true
-      setDragY(dy)
-      e.preventDefault()
+    const onTouchStart = (e) => {
+      dragStartY.current = e.touches[0].clientY
+      dragging.current = false
+      dragYRef.current = 0
     }
-  }
 
-  const handleDragEnd = () => {
-    if (dragging.current && dragY > 120) {
-      // Dismiss — slide fully down then close
-      setDragY(window.innerHeight)
-      setTimeout(() => {
-        completedMode ? onClose() : handleSave()
-      }, 150)
-    } else {
-      setDragY(0)
+    const onTouchMove = (e) => {
+      const dy = e.touches[0].clientY - dragStartY.current
+      if (dy > 0) {
+        dragging.current = true
+        dragYRef.current = dy
+        setDragY(dy)
+        e.preventDefault() // prevents scroll while dragging modal down
+      }
     }
-    dragging.current = false
-  }
+
+    const onTouchEnd = () => {
+      if (dragging.current && dragYRef.current > 120) {
+        setDragY(window.innerHeight)
+        setTimeout(() => {
+          completedMode ? onClose() : handleSave()
+        }, 150)
+      } else {
+        setDragY(0)
+      }
+      dragging.current = false
+      dragYRef.current = 0
+    }
+
+    handle.addEventListener('touchstart', onTouchStart, { passive: true })
+    handle.addEventListener('touchmove', onTouchMove, { passive: false })
+    handle.addEventListener('touchend', onTouchEnd, { passive: true })
+
+    return () => {
+      handle.removeEventListener('touchstart', onTouchStart)
+      handle.removeEventListener('touchmove', onTouchMove)
+      handle.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [isMobile])
 
   // Auto-expand notes textarea on mount
   useEffect(() => {
@@ -152,15 +172,13 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
           transition: dragging.current ? 'none' : 'transform 0.2s ease-out',
         }}
       >
-        {/* Mobile drag handle */}
+        {/* Mobile drag handle — swipe down to dismiss */}
         {isMobile && (
           <div
-            className="flex justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing"
-            onTouchStart={handleDragStart}
-            onTouchMove={handleDragMove}
-            onTouchEnd={handleDragEnd}
+            ref={handleRef}
+            className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none"
           >
-            <div className="w-10 h-1 rounded-full bg-gray-300" />
+            <div className="w-10 h-1.5 rounded-full bg-gray-300" />
           </div>
         )}
 

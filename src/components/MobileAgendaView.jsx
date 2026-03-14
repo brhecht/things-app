@@ -33,41 +33,35 @@ const PROJECT_ORDER = [
 
 const BUCKET_ORDER = ['inbox', 'today', 'waiting', 'tomorrow', 'soon', 'someday']
 
-function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects }) {
+function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects, scrollRef }) {
   const startX = useRef(0)
   const startY = useRef(0)
-  const startTime = useRef(0)
   const swiping = useRef(false)
-  const scrolling = useRef(false)
+  const scrollYStart = useRef(0)
+  const didSwipe = useRef(false)
   const [offset, setOffset] = useState(0)
   const [revealed, setRevealed] = useState(null) // 'left' | 'right' | null — locks open after swipe
 
   const SNAP_THRESHOLD = 60  // how far to swipe before it snaps open
   const REVEAL_WIDTH = 80    // how wide the revealed action button is
-  const TAP_MOVE_THRESHOLD = 10  // max px movement to still count as tap
-  const TAP_TIME_THRESHOLD = 300 // max ms to still count as tap
 
   const handleTouchStart = (e) => {
     startX.current = e.touches[0].clientX
     startY.current = e.touches[0].clientY
-    startTime.current = Date.now()
     swiping.current = false
-    scrolling.current = false
+    didSwipe.current = false
+    // Capture parent scroll position at touch start
+    scrollYStart.current = scrollRef?.current?.scrollTop ?? 0
   }
 
   const handleTouchMove = (e) => {
     const dx = e.touches[0].clientX - startX.current
     const dy = e.touches[0].clientY - startY.current
 
-    // If vertical motion > horizontal on first move, it's a scroll — don't open card
-    if (!swiping.current && !scrolling.current && Math.abs(dy) > Math.abs(dx)) {
-      scrolling.current = true
-      return
-    }
-    // If already determined to be scrolling, let the browser handle it
-    if (scrolling.current) return
-
+    // If vertical motion > horizontal on first move, let browser scroll handle it
+    if (!swiping.current && Math.abs(dy) > Math.abs(dx)) return
     swiping.current = true
+    didSwipe.current = true
 
     // If already revealed, allow swiping back
     if (revealed === 'right') {
@@ -81,27 +75,9 @@ function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects }
     }
   }
 
-  const handleTouchEnd = (e) => {
-    const endX = e.changedTouches[0].clientX
-    const endY = e.changedTouches[0].clientY
-    const totalMove = Math.sqrt(
-      Math.pow(endX - startX.current, 2) + Math.pow(endY - startY.current, 2)
-    )
-    const elapsed = Date.now() - startTime.current
-
-    if (!swiping.current) {
-      // Only count as tap if finger barely moved AND was quick
-      const isTap = totalMove < TAP_MOVE_THRESHOLD && elapsed < TAP_TIME_THRESHOLD
-      if (isTap) {
-        if (revealed) {
-          setRevealed(null)
-          setOffset(0)
-        } else {
-          onTap()
-        }
-      }
-      return
-    }
+  const handleTouchEnd = () => {
+    // Never fire tap from touch events — onClick handles that via handleClick
+    if (!swiping.current) return
 
     if (revealed) {
       // Already revealed — check if user swiped it back to close
@@ -147,6 +123,20 @@ function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects }
     }
   }
 
+  // Click handler — suppresses if the scroll container moved (user was scrolling)
+  // or if a horizontal swipe just happened
+  const handleClick = () => {
+    const scrollYEnd = scrollRef?.current?.scrollTop ?? 0
+    const scrolled = Math.abs(scrollYEnd - scrollYStart.current) > 5
+    if (scrolled || didSwipe.current) return
+    if (revealed) {
+      setRevealed(null)
+      setOffset(0)
+    } else {
+      onTap()
+    }
+  }
+
   const projectName = projects.find(p => p.id === task.projectId)?.name || ''
 
   const nextBucketLabel = () => {
@@ -180,6 +170,7 @@ function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects }
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onClick={handleClick}
         className={`relative bg-white px-4 py-3.5 flex items-center gap-3 ${
           task.priority === 'high' ? 'border-l-[3px] border-l-emerald-500' :
           task.priority === 'medium' ? 'border-l-[3px] border-l-amber-400' :
@@ -223,6 +214,7 @@ function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects }
 export default function MobileAgendaView({ bucketFilter, projectFilter }) {
   const { tasks, projects, updateTask } = useStore()
   const [selectedTask, setSelectedTask] = useState(null)
+  const scrollContainerRef = useRef(null)
 
   // Filter tasks
   let visibleTasks = tasks.filter(t => !t.completed)
@@ -260,7 +252,7 @@ export default function MobileAgendaView({ bucketFilter, projectFilter }) {
       </div>
 
       {/* Task list */}
-      <div className="flex-1 overflow-auto px-4 pb-36">
+      <div ref={scrollContainerRef} className="flex-1 overflow-auto px-4 pb-36">
         {bucketsToShow.map(bucket => {
           const bucketTasks = visibleTasks
             .filter(t => t.bucket === bucket.id)
@@ -292,6 +284,7 @@ export default function MobileAgendaView({ bucketFilter, projectFilter }) {
                   key={task.id}
                   task={task}
                   projects={projects}
+                  scrollRef={scrollContainerRef}
                   onComplete={() => updateTask(task.id, { completed: true })}
                   onBucketChange={(newBucket) => updateTask(task.id, { bucket: newBucket })}
                   onTap={() => setSelectedTask(task)}
