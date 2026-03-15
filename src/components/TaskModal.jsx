@@ -31,6 +31,8 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
   const [dueDate,   setDueDate]   = useState(task.dueDate || '')
   const [starred,   setStarred]   = useState(task.starred || false)
   const [completed, setCompleted] = useState(task.completed || false)
+  const [assignedToNico, setAssignedToNico] = useState(task.assignedToNico || false)
+  const [assigning, setAssigning] = useState(false)
 
   const titleRef = useRef(null)
   const notesRef = useRef(null)
@@ -117,7 +119,8 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
         else if (diffDays <= 7) finalBucket = 'soon'
         else finalBucket = 'someday'
       }
-      const updates = { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, starred, completed }
+      const updates = { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, starred, completed, assignedToNico }
+      if (assignedToNico && !task.assignedToNico) updates.assignedAt = Date.now()
       // Match TaskCard behavior: starring sets sortWeight for ordering
       if (starred && !task.starred) updates.sortWeight = Date.now()
       updateTask(task.id, updates)
@@ -351,6 +354,51 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
               />
             </div>
           </div>
+
+          {/* Assign to Nico */}
+          {!completedMode && (
+            <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
+              <label className="text-sm text-gray-400 w-20 flex-shrink-0">Assign</label>
+              <div className="flex-1">
+                {assignedToNico ? (
+                  <span className="text-sm text-green-600 font-medium">Assigned to Nico ✓</span>
+                ) : (
+                  <button
+                    disabled={assigning}
+                    onClick={async () => {
+                      setAssigning(true)
+                      try {
+                        const projectName = projects.find(p => p.id === projectId)?.name || 'Unknown'
+                        const taskLink = `https://things-app-gamma.vercel.app?task=${task.id}`
+                        let summary = `Assigned: ${title.trim() || task.title}\n${taskLink}`
+                        if (notes && notes.trim()) summary += `\n\nNotes: ${notes.trim()}`
+
+                        await fetch('https://brain-inbox-six.vercel.app/api/handoff-notify', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'text/plain' },
+                          body: JSON.stringify({
+                            project: projectName,
+                            summary,
+                            recipient: 'nico@humbleconviction.com',
+                            recipientSlackId: 'U09GRAMET4H',
+                          }),
+                        })
+                        setAssignedToNico(true)
+                      } catch (err) {
+                        console.error('Assign to Nico failed:', err)
+                        alert('Failed to assign — check console')
+                      } finally {
+                        setAssigning(false)
+                      }
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors disabled:opacity-50"
+                  >
+                    {assigning ? 'Sending…' : 'Assign to Nico →'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

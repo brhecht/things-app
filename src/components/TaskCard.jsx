@@ -75,6 +75,11 @@ export default function TaskCard({ task, onClick }) {
           {task.starred ? '★' : '☆'}
         </button>
 
+        {/* Assigned to Nico indicator */}
+        {task.assignedToNico && (
+          <span className="flex-shrink-0 text-[10px] font-bold text-lime-600 bg-lime-50 px-1 py-0.5 rounded" title="Assigned to Nico">→N</span>
+        )}
+
         {/* Unread message indicator */}
         {hasUnread && (
           <span className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500" title="Unread messages" />
