@@ -19,6 +19,7 @@ export default function NoteThread({ ownerUid, taskId, taskTitle }) {
   const [draft, setDraft] = useState('')
   const [showMentions, setShowMentions] = useState(false)
   const [mentionFilter, setMentionFilter] = useState('')
+  const [notifyStatus, setNotifyStatus] = useState(null) // { type: 'sent'|'failed', name, ts }
   const scrollRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -46,6 +47,13 @@ export default function NoteThread({ ownerUid, taskId, taskTitle }) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages.length])
+
+  // ── Auto-clear notification status after 3s ────────────────────
+  useEffect(() => {
+    if (!notifyStatus) return
+    const t = setTimeout(() => setNotifyStatus(null), 3000)
+    return () => clearTimeout(t)
+  }, [notifyStatus])
 
   // ── Send message ────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
@@ -76,16 +84,28 @@ export default function NoteThread({ ownerUid, taskId, taskTitle }) {
           const taskUrl = `https://things-app-gamma.vercel.app/?task=${taskId}`
           const preview = text.length > 200 ? text.slice(0, 200) + '…' : text
           const payload = `💬 ${msg.authorName} in B Things: "${taskTitle}"\n${preview}\n→ ${taskUrl}`
-          fetch(NOTIFY_ENDPOINT, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              project: 'B Things',
-              summary: payload,
-              recipient: mentioned.email,
-              recipientSlackId: mentioned.slackUserId,
-            }),
-          }).catch((err) => console.error('Notify failed:', err))
+          try {
+            const resp = await fetch(NOTIFY_ENDPOINT, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                project: 'B Things',
+                summary: payload,
+                recipient: mentioned.email,
+                recipientSlackId: mentioned.slackUserId,
+              }),
+            })
+            const data = await resp.json().catch(() => ({}))
+            if (resp.ok && data.slackOk !== false) {
+              setNotifyStatus({ type: 'sent', name: mentioned.displayName, ts: Date.now() })
+            } else {
+              console.error('Notify response error:', data)
+              setNotifyStatus({ type: 'failed', name: mentioned.displayName, ts: Date.now() })
+            }
+          } catch (err) {
+            console.error('Notify failed:', err)
+            setNotifyStatus({ type: 'failed', name: mentioned.displayName, ts: Date.now() })
+          }
         }
       }
     } catch (err) {
@@ -212,6 +232,17 @@ export default function NoteThread({ ownerUid, taskId, taskTitle }) {
             </div>
           )
         })}
+        </div>
+      )}
+
+      {/* Notification status toast */}
+      {notifyStatus && (
+        <div className={`text-[11px] px-2 py-1 text-center transition-opacity ${
+          notifyStatus.type === 'sent' ? 'text-green-600' : 'text-red-500'
+        }`}>
+          {notifyStatus.type === 'sent'
+            ? `Notified ${notifyStatus.name}`
+            : `Failed to notify ${notifyStatus.name}`}
         </div>
       )}
 
