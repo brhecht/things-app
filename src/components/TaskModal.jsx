@@ -216,7 +216,12 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
             onClick={() => {
               const next = !starred
               setStarred(next)
-              if (next) setPriority('high')
+              if (next) {
+                setPriority('high')
+                updateTask(task.id, { starred: true, sortWeight: Date.now(), priority: 'high' })
+              } else {
+                updateTask(task.id, { starred: false })
+              }
             }}
             onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault() }}
             className={`flex-shrink-0 text-xl leading-none transition-colors ${

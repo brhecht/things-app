@@ -264,7 +264,10 @@ const useStore = create((set, get) => ({
       else if ('bucket' in updates) label = 'move'
       else if ('projectId' in updates) label = 'reassign'
       get()._pushUndo('update', { ...existing }, label)
-      upsertTask(dataUid, { ...existing, ...updates })
+      // Optimistic local update — reflect change immediately before Firestore round-trip
+      const updated = { ...existing, ...updates }
+      set({ tasks: tasks.map((t) => (t.id === id ? updated : t)) })
+      upsertTask(dataUid, updated)
     }
   },
 
