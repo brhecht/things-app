@@ -75,42 +75,47 @@ export default function NoteThread({ ownerUid, taskId, taskTitle }) {
 
     try {
       await addMessage(ownerUid, taskId, msg)
-      await updateTaskMsgMeta(ownerUid, taskId, user.email)
-
-      // Send notifications for each mentioned user (except self)
-      for (const handle of mentions) {
-        const mentioned = getUserByHandle(handle)
-        if (mentioned && mentioned.email !== user.email) {
-          const taskUrl = `https://things-app-gamma.vercel.app/?task=${taskId}`
-          const preview = text.length > 200 ? text.slice(0, 200) + '…' : text
-          const payload = `💬 ${msg.authorName} in B Things: "${taskTitle}"\n${preview}\n→ ${taskUrl}`
-          try {
-            const resp = await fetch(NOTIFY_ENDPOINT, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                project: 'B Things',
-                summary: payload,
-                recipient: mentioned.email,
-                recipientSlackId: mentioned.slackUserId,
-              }),
-            })
-            const data = await resp.json().catch(() => ({}))
-            if (resp.ok && data.slackOk !== false) {
-              setNotifyStatus({ type: 'sent', name: mentioned.displayName, ts: Date.now() })
-            } else {
-              console.error('Notify response error:', data)
-              setNotifyStatus({ type: 'failed', name: mentioned.displayName, ts: Date.now() })
-            }
-          } catch (err) {
-            console.error('Notify failed:', err)
-            setNotifyStatus({ type: 'failed', name: mentioned.displayName, ts: Date.now() })
-          }
-        }
-      }
     } catch (err) {
       console.error('Send message failed:', err)
       setDraft(text)
+      return
+    }
+
+    // Message saved — update metadata and notify (failures here are non-fatal)
+    updateTaskMsgMeta(ownerUid, taskId, user.email).catch((err) =>
+      console.warn('updateTaskMsgMeta failed (non-fatal):', err)
+    )
+
+    // Send notifications for each mentioned user (except self)
+    for (const handle of mentions) {
+      const mentioned = getUserByHandle(handle)
+      if (mentioned && mentioned.email !== user.email) {
+        const taskUrl = `https://things-app-gamma.vercel.app/?task=${taskId}`
+        const preview = text.length > 200 ? text.slice(0, 200) + '…' : text
+        const payload = `💬 ${msg.authorName} in B Things: "${taskTitle}"\n${preview}\n→ ${taskUrl}`
+        try {
+          const resp = await fetch(NOTIFY_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              project: 'B Things',
+              summary: payload,
+              recipient: mentioned.email,
+              recipientSlackId: mentioned.slackUserId,
+            }),
+          })
+          const data = await resp.json().catch(() => ({}))
+          if (resp.ok && data.slackOk !== false) {
+            setNotifyStatus({ type: 'sent', name: mentioned.displayName, ts: Date.now() })
+          } else {
+            console.error('Notify response error:', data)
+            setNotifyStatus({ type: 'failed', name: mentioned.displayName, ts: Date.now() })
+          }
+        } catch (err) {
+          console.error('Notify failed:', err)
+          setNotifyStatus({ type: 'failed', name: mentioned.displayName, ts: Date.now() })
+        }
+      }
     }
   }, [draft, user, currentUser, ownerUid, taskId, taskTitle])
 
