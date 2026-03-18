@@ -1,5 +1,5 @@
 # HANDOFF — B Things
-*Last updated: March 16, 2026 ~3:30 PM ET*
+*Last updated: March 18, 2026 ~12:00 PM ET*
 
 ## Project Overview
 Kanban-style personal task board with time-based columns, project grouping, drag-and-drop. Full read-write access for both Brian and Nico (viewer mode upgraded to read-write March 16). Part of B-Suite ecosystem with app switcher.
@@ -24,26 +24,26 @@ React + Vite, Firebase Auth (Google Sign-In), Firestore real-time. Vercel auto-d
 ## Current Status
 Active, fully functional. All features deployed and verified including NoteThread bidirectional messaging and star fix.
 
-## Recent Changes (March 16, 2026)
+## Recent Changes (March 18, 2026)
 
-1. **NoteThread @mention notifications fixed** — Root cause: Firestore rules were missing a `match /messages/{messageId}` subcollection under `users/{userId}/tasks/{taskId}`. Firestore rules don't cascade to subcollections. Added nested match rule in `brain-inbox/firestore.rules` and deployed via Firebase console. Messages now save, render in iMessage-style thread, and trigger Slack DM notifications with "Notified [Name]" / "Failed to notify [Name]" toast feedback.
+1. **Smart title fallback for content→things sync** — `api/content-today.js` now uses a `cardTitle()` function instead of `card.title || '(untitled content)'`. Fallback chain: card title → archiveData title/subjectLine + type label → type label alone (e.g., "YT Video", "LinkedIn Post", "Beehiiv Newsletter", "YT Short") → "(untitled content)" as last resort. This means task cards created from content calendar items now show useful names instead of "Untitled".
 
-2. **NoteThread error handling fixed** — The try/catch around message send was restoring draft text to the input whenever ANY step failed (including metadata update and notifications). Refactored: only restores draft if `addMessage` itself fails. `updateTaskMsgMeta` and notification sends are now fire-and-forget — failures are logged but don't affect UX. This fixed Nico's "message goes back to type box" bug.
+2. **Consolidated content→things sync to single path** — The real-time Firebase Cloud Function `syncContentToThings` in brain-inbox was removed. The daily Vercel cron (`api/content-today.js`, 7am ET) is now the sole sync path. This eliminates a Firebase CLI deploy dependency and keeps all things-app sync logic in one repo.
 
-3. **Star persistence fixed — optimistic local update** — `updateTask` in store.js now immediately updates the local Zustand store before writing to Firestore. Eliminates the perceived "flicker" where starring a task would briefly show the star, then the kanban re-sort would move the card and make it look like the star vanished.
-
-4. **Star in TaskModal persists immediately** — Star toggle in the modal now calls `updateTask` on click (with `sortWeight` and `priority: 'high'`), not deferred to modal save. Previously only set local React state, so closing without explicit save would lose the star.
-
-5. **Firestore rules: viewers upgraded to read-write** — `users/{userId}/tasks/{taskId}` and `users/{userId}/projects/{projectId}` rules changed from `allow read` to `allow read, write` for registered viewers. Nico can now star, edit, and modify tasks directly. Previously viewer was read-only, causing silent Firestore write failures.
+### Previous session (March 16, 2026):
+- NoteThread @mention notifications fixed (Firestore subcollection rules)
+- NoteThread error handling fixed (only restore draft on actual send failure)
+- Star persistence fixed (optimistic local update in Zustand store)
+- Star in TaskModal persists immediately on click
+- Firestore rules: viewers upgraded to read-write for Nico
 
 ## Known Bugs / Issues
 - **Cowork VM build uses /tmp clone** — `vite build` on mounted folder has permission issues with `emptyDir`. Workaround: clone to `/tmp/things-build`, copy changed files, build and push from there. Works reliably.
-- **iMac has no Node.js installed** — `npx`/`npm` not found. Firebase CLI deploys must be done via Firebase console UI (paste rules and publish). Install Node when convenient: `brew install node`.
+- **iMac now has Node 20 + firebase-tools** — Installed via nvm during March 18 session. Firebase CLI is at `/usr/local/bin/firebase`. Firebase login is authenticated as `brhnyc1970@gmail.com`. However, deploying brain-inbox Cloud Functions requires secrets (SLACK_SIGNING_SECRET etc.) that only Nico's environment has configured.
 
 ## Planned Features / Backlog
 - Re-send/update assignment to Nico after editing task (small "Resend" link)
 - Bidirectional sync: Nico completes in Brain Inbox → auto-complete in Things
-- Remove Vercel cron fallback (`api/content-today.js`) once Firestore trigger confirmed stable
 
 ## Design Decisions & Constraints
 - `firebase.json` is empty `{}` — things-app must never deploy Firebase resources. Brain-inbox is the sole Firestore rules deployer.
