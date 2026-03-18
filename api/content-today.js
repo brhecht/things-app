@@ -10,6 +10,25 @@ function getDb() {
   return getFirestore()
 }
 
+/** Human-readable label for a content type slug */
+const TYPE_LABELS = {
+  'yt-video': 'YT Video',
+  'yt-short': 'YT Short',
+  'linkedin': 'LinkedIn Post',
+  'beehiiv': 'Beehiiv Newsletter',
+}
+
+/** Build a useful title from whatever the card has */
+function cardTitle(card) {
+  if (card.title) return card.title
+  const label = TYPE_LABELS[card.contentType] || card.contentType || null
+  const archTitle = card.archiveData?.title || card.archiveData?.subjectLine || null
+  if (archTitle && label) return `${archTitle} — ${label}`
+  if (archTitle) return archTitle
+  if (label) return label
+  return '(untitled content)'
+}
+
 /** Return today's date as YYYY-MM-DD in US Eastern time */
 function todayET() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
@@ -79,7 +98,7 @@ export default async function handler(req, res) {
 
       const task = {
         id: taskId,
-        title: card.title || '(untitled content)',
+        title: cardTitle(card),
         projectId: 'hc-content',
         bucket: 'today',
         priority: null,
