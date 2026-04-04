@@ -38,10 +38,23 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    const { title, project, projectId: directProjectId, bucket, notes, dueDate } = req.body
+    const { title, project, projectId: directProjectId, bucket, notes, dueDate, idempotencyKey } = req.body
 
     if (!title || typeof title !== 'string') {
       return res.status(400).json({ error: 'Missing "title" field' })
+    }
+
+    const db = getDb()
+    const OWNER_UID = process.env.OWNER_UID
+    const tasksRef = db.collection('users').doc(OWNER_UID).collection('tasks')
+
+    // Idempotency: if a key is provided, check if a task with that key already exists
+    if (idempotencyKey) {
+      const existing = await tasksRef.where('idempotencyKey', '==', idempotencyKey).limit(1).get()
+      if (!existing.empty) {
+        const existingTask = existing.docs[0].data()
+        return res.status(200).json({ ok: true, task: existingTask, deduplicated: true })
+      }
     }
 
     // Resolve project: direct projectId takes priority, then name lookup, then "unassigned"
@@ -67,12 +80,11 @@ export default async function handler(req, res) {
       sortWeight: 0,
       createdAt: Date.now(),
       ...(dueDate ? { dueDate } : {}),
+      ...(idempotencyKey ? { idempotencyKey } : {}),
     }
 
     // Write to Firestore
-    const db = getDb()
-    const OWNER_UID = process.env.OWNER_UID
-    await db.collection('users').doc(OWNER_UID).collection('tasks').doc(taskId).set(task)
+    await tasksRef.doc(taskId).set(task)
 
     return res.status(200).json({ ok: true, task })
   } catch (err) {
