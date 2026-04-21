@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 
 const APPS = [
-  { key: 'eddy',      label: 'B Eddy',      icon: 'E', url: 'https://eddy-tracker.vercel.app',         color: '#7C6BCC' },
+  { key: 'eddy',      label: 'B Projects',  icon: 'P', url: 'https://eddy-tracker.vercel.app',         color: '#7C6BCC' },
   { key: 'things',    label: 'B Things',     icon: 'T', url: 'https://things-app-gamma.vercel.app',     color: '#3ABD82' },
   { key: 'content',   label: 'B Content',    icon: 'C', url: 'https://content-calendar-nine.vercel.app', color: '#E6A817' },
   { key: 'people',    label: 'B People',     icon: 'P', url: 'https://b-people.vercel.app',             color: '#E07A5F' },

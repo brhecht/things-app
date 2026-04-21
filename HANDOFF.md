@@ -65,3 +65,10 @@ Active, fully functional. All features deployed and verified including NoteThrea
 
 ## Open Questions / Decisions Pending
 None.
+
+## Session Log
+
+### 2026-04-21 — AppSwitcher: B Eddy → B Projects
+- **What shipped:** Renamed B Eddy to B Projects in AppSwitcher (label + icon E→P) to match bhub homepage.
+- **Known issues:** None.
+- **Next:** None.
