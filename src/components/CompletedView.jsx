@@ -13,6 +13,7 @@ const PROJECT_COLORS = {
   'georgetown':       'bg-rose-100 text-rose-700',
   'friends':          'bg-pink-100 text-pink-700',
   'from-nico':        'bg-lime-100 text-lime-700',
+  'infra':            'bg-slate-100 text-slate-700',
   'unassigned':       'bg-stone-100 text-stone-600',
 }
 

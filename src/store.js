@@ -28,7 +28,7 @@ const uid = () => `id-${Date.now()}-${counter++}`
 const LEGACY_ORDER = [
   'hc-admin', 'hc-content', 'hc-revenue', 'portfolio',
   'life-admin', 'personal-finance', 'network', 'georgetown', 'friends',
-  'from-nico', 'unassigned',
+  'from-nico', 'infra', 'unassigned',
 ]
 
 // Default projects for brand-new users (first sign-in)
@@ -42,7 +42,8 @@ const SEED_PROJECTS = [
   { id: 'network',          name: 'Network',           sortOrder: 6 },
   { id: 'georgetown',       name: 'Georgetown',        sortOrder: 7 },
   { id: 'friends',          name: 'Friends',            sortOrder: 8 },
-  { id: 'misc',             name: 'Misc',              sortOrder: 9 },
+  { id: 'infra',            name: 'Infra',             sortOrder: 9 },
+  { id: 'misc',             name: 'Misc',              sortOrder: 10 },
 ]
 
 const SEED_TASKS = [
@@ -158,6 +159,12 @@ const useStore = create((set, get) => ({
       // One-time: add Unassigned project if it doesn't exist yet
       if (!projects.find((p) => p.id === 'unassigned')) {
         upsertProject(userId, { id: 'unassigned', name: 'Unassigned' })
+        return // snapshot will re-fire with the new project
+      }
+
+      // One-time: add Infra project if it doesn't exist yet
+      if (!projects.find((p) => p.id === 'infra')) {
+        upsertProject(userId, { id: 'infra', name: 'Infra' })
         return // snapshot will re-fire with the new project
       }
 

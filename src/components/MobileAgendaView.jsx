@@ -22,13 +22,14 @@ const PROJECT_COLORS = {
   'georgetown':       'bg-rose-100 text-rose-700',
   'friends':          'bg-pink-100 text-pink-700',
   'from-nico':        'bg-lime-100 text-lime-700',
+  'infra':            'bg-slate-100 text-slate-700',
   'unassigned':       'bg-stone-100 text-stone-600',
 }
 
 const PROJECT_ORDER = [
   'hc-admin', 'hc-content', 'hc-revenue', 'portfolio',
   'life-admin', 'personal-finance', 'network', 'georgetown', 'friends',
-  'from-nico', 'unassigned',
+  'from-nico', 'infra', 'unassigned',
 ]
 
 const BUCKET_ORDER = ['inbox', 'today', 'waiting', 'tomorrow', 'soon', 'someday']

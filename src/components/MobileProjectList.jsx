@@ -11,6 +11,7 @@ const DOT_COLORS = {
   'georgetown':       'bg-rose-400',
   'friends':          'bg-pink-400',
   'from-nico':        'bg-lime-400',
+  'infra':            'bg-slate-400',
   'unassigned':       'bg-stone-400',
 }
 

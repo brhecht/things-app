@@ -13,6 +13,10 @@ const PROJECT_MAP = {
   'network':           'network',
   'georgetown':        'georgetown',
   'friends':           'friends',
+  'infra':             'infra',
+  'b-suite':           'infra',
+  'b suite':           'infra',
+  'bsuite':            'infra',
   'misc':              'misc',
 }
 
