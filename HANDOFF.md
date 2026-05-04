@@ -72,3 +72,8 @@ None.
 - **What shipped:** Renamed B Eddy to B Projects in AppSwitcher (label + icon E→P) to match bhub homepage.
 - **Known issues:** None.
 - **Next:** None.
+
+### 2026-05-04 — Added "Infra" project for B-Suite ops/maintenance tasks
+- **What shipped:** New `infra` project (slate accents). PROJECT_MAP in `api/add-task.js` accepts "infra", "b-suite", "b suite", "bsuite". One-time auto-injection in store.js (matches the `network`/`from-nico` pattern) so it shows up in existing users' Firestore on next app load. Color maps + sort order updated across all 7 components (Sidebar, AgendaView, MobileAgendaView, MobileProjectList, CompletedView, KanbanBoard).
+- **Known issues:** Test task `__INFRA_TEST__ delete me` (created during deploy verification) — delete from UI.
+- **Next:** None.
