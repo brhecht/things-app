@@ -1,8 +1,8 @@
 # HANDOFF — B Things
-*Last updated: March 18, 2026 ~12:00 PM ET*
+*Last updated: May 25, 2026 ~5:00 PM ET*
 
 ## Project Overview
-Kanban-style personal task board with time-based columns, project grouping, drag-and-drop. Full read-write access for both Brian and Nico (viewer mode upgraded to read-write March 16). Part of B-Suite ecosystem with app switcher.
+Kanban-style personal task board with time-based columns, project grouping, drag-and-drop. Brian is the owner; Nico is a registered collaborator (`isViewer === true`) who reads/writes Brian's same Firestore dataset. Part of B-Suite ecosystem with app switcher. Supports per-project visibility filtering (cognitive-load only — not access control) so Brian can mark personal projects hidden from Nico's view.
 
 ## Tech Stack
 React + Vite, Firebase Auth (Google Sign-In), Firestore real-time. Vercel auto-deploy from GitHub main. Firebase project: `b-things` (shared with brain-inbox, content-calendar, b-resources). Tailwind CSS 3.4.
@@ -17,18 +17,24 @@ React + Vite, Firebase Auth (Google Sign-In), Firestore real-time. Vercel auto-d
 - `src/components/CompletedView.jsx` — Completed task archive. Clicking a task opens TaskModal in `completedMode` for editing + restoring.
 - `src/components/MobileBottomNav.jsx` — Mobile tab bar (Inbox, Today, All, Projects, Completed).
 - `src/components/MobileQuickAdd.jsx` — Floating quick-add button on mobile.
-- `src/store.js` — Zustand store. Firebase CRUD, auth, undo stack. `updateTask` uses optimistic local update (sets store immediately, then writes to Firestore).
+- `src/components/Sidebar.jsx` — Project list nav + filters. Hover-revealed eye/eye-off toggle on each project row (owner-only) controls `hiddenFromViewers`; hidden projects render italic-gray with a persistent eye-off icon in owner's view.
+- `src/store.js` — Zustand store. Firebase CRUD, auth, undo stack. `updateTask` uses optimistic local update. Keeps `_rawProjects`/`_rawTasks` internally; exposed `projects`/`tasks` are filtered when `isViewer === true` (cognitive-load filter for Nico). `toggleProjectHidden(id)` writes the flag to the project doc.
 - `src/App.jsx` — Root. Desktop vs mobile layout split via `useIsMobile`. Deep-link support (`?task=docId`).
 - `firebase.json` — Empty `{}`. Things-app cannot deploy any Firebase resources.
+- `vercel.json` — Empty `{}`. No cron jobs. (The daily Content Calendar → B Things sync was removed May 25, 2026.)
 
 ## Current Status
-Active, fully functional. All features deployed and verified including NoteThread bidirectional messaging and star fix.
+Active, fully functional. All features deployed and verified including: NoteThread bidirectional messaging, two-way Brian↔Nico data sharing, per-project viewer hiding (cosmetic filter), and Substack-canonical content links. No daily content sync from B Content (removed May 25, 2026).
 
-## Recent Changes (March 18, 2026)
+## Recent Changes (May 25, 2026)
 
-1. **Smart title fallback for content→things sync** — `api/content-today.js` now uses a `cardTitle()` function instead of `card.title || '(untitled content)'`. Fallback chain: card title → archiveData title/subjectLine + type label → type label alone (e.g., "YT Video", "LinkedIn Post", "Beehiiv Newsletter", "YT Short") → "(untitled content)" as last resort. This means task cards created from content calendar items now show useful names instead of "Untitled".
+1. **Per-project viewer hiding (cognitive-load filter)** — Owner can mark any project hidden from Nico's view. Hover-revealed eye toggle in the sidebar; persistent eye-off + italic name on hidden projects in owner's view. Store filters `projects` and `tasks` when `isViewer === true`. Default false for all projects. UI-only filter — Nico retains Firestore read/write at the DB layer. Brian explicitly accepted this trade-off ("I'm okay with that").
 
-2. **Consolidated content→things sync to single path** — The real-time Firebase Cloud Function `syncContentToThings` in brain-inbox was removed. The daily Vercel cron (`api/content-today.js`, 7am ET) is now the sole sync path. This eliminates a Firebase CLI deploy dependency and keeps all things-app sync logic in one repo.
+2. **Removed daily Content Calendar → B Things sync** — Deleted Vercel cron from `vercel.json` and removed `api/content-today.js`. Brian doesn't want content cards auto-pushed to B Things anymore — too much cognitive clutter. Previously-auto-synced tasks (those with `sourceCardId`) remain as regular B Things tasks; not retroactively deleted. The `notifyNicoOnContentStatusChange` Firestore trigger in brain-inbox is unrelated and stays.
+
+### Previous session (March 18, 2026):
+- Smart title fallback for the (now-removed) content→things sync — fallback chain card title → archiveData title + type label → type label alone.
+- Consolidated content→things sync to single Vercel cron path (now also removed).
 
 ### Previous session (March 16, 2026):
 - NoteThread @mention notifications fixed (Firestore subcollection rules)
@@ -38,7 +44,9 @@ Active, fully functional. All features deployed and verified including NoteThrea
 - Firestore rules: viewers upgraded to read-write for Nico
 
 ## Known Bugs / Issues
-- **Cowork VM build uses /tmp clone** — `vite build` on mounted folder has permission issues with `emptyDir`. Workaround: clone to `/tmp/things-build`, copy changed files, build and push from there. Works reliably.
+- **Cowork VM build uses /tmp clone** — `vite build` on mounted folder has permission issues with `emptyDir`. Workaround: clone to `/tmp/things-build` (or reuse the bsync clone), copy changed files, build and push from there. Standard dev-deploy pattern now.
+- **Mount cosmetic artifact: `api/content-today.js`** — File was `git rm`'d on May 25 but FUSE blocked the unlink, so it lingers as an untracked file on Brian's working tree. Safe to ignore; `rm` it whenever. Doesn't affect deploys (Vercel only ships committed files).
+- **Viewer reorder edge case** — When Nico reorders projects, only visible projects get sortOrder assignments, which can shuffle hidden projects' positions in Brian's view. Low-impact; not fixed.
 - **iMac now has Node 20 + firebase-tools** — Installed via nvm during March 18 session. Firebase CLI is at `/usr/local/bin/firebase`. Firebase login is authenticated as `brhnyc1970@gmail.com`. However, deploying brain-inbox Cloud Functions requires secrets (SLACK_SIGNING_SECRET etc.) that only Nico's environment has configured.
 
 ## Planned Features / Backlog
@@ -46,11 +54,12 @@ Active, fully functional. All features deployed and verified including NoteThrea
 - Bidirectional sync: Nico completes in Brain Inbox → auto-complete in Things
 
 ## Design Decisions & Constraints
-- `firebase.json` is empty `{}` — things-app must never deploy Firebase resources. Brain-inbox is the sole Firestore rules deployer.
+- `firebase.json` and `vercel.json` are both empty `{}`. Things-app deploys no Firebase resources and runs no scheduled crons.
+- **Per-project hiding is a UI filter, not access control.** Owner sets `hiddenFromViewers: true` on a project; store filters that project and all its tasks out of `projects`/`tasks` when `isViewer === true`. Viewer (Nico) still has Firestore-level read/write — anyone with devtools could query hidden docs. Explicit design choice per Brian.
 - Assign to Nico uses `handoff-notify` API (not Slack syntax) for reliability. No `HANDOFF_SECRET` required — endpoint doesn't enforce it in production.
 - Mobile tap detection uses `onClick` + scroll-position guard (not touch events) because `touchAction: pan-y` causes browser to swallow `touchmove` during native scroll.
 - Swipe-down-to-close uses manual `addEventListener({ passive: false })` because React attaches touch listeners as passive by default.
-- Git push from Cowork goes through `/tmp/things-build` clone to avoid HEAD.lock issues on mounted folder.
+- Git push from Cowork goes through `/tmp/` clone to avoid FUSE EPERM issues on mounted folder (standard dev-deploy pattern).
 - Star toggle sets `sortWeight: Date.now()` + `priority: 'high'` on star, which causes kanban to re-sort starred items to top of project group. This is intentional — the card movement IS the feature.
 - NoteThread notification sends use `/api/notify` (server-side proxy) which forwards to `handoff-notify` with Content-Type header. Content Calendar's NoteThread calls `handoff-notify` directly WITHOUT Content-Type header (CORS avoidance).
 - `updateTask` uses optimistic local update pattern: set Zustand store first, then write to Firestore. Firestore snapshot listener will confirm/reconcile on next tick.
