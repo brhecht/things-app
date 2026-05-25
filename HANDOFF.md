@@ -82,3 +82,8 @@ None.
 - **What shipped:** Owner can mark any project hidden from collaborator (Nico). Toggle is the eye/eye-off icon revealed on hover in the Sidebar; persistent eye-off + italic name marks a hidden project in owner's view. Store now keeps `_rawProjects`/`_rawTasks` and filters `projects`/`tasks` when `isViewer === true` (filters out hidden projects + their tasks). New action `toggleProjectHidden(id)` writes `hiddenFromViewers: true/false` to the project doc. Default false — no existing project changes state on deploy.
 - **Known issues:** This is a UI filter, not access control. Viewers still have Firestore read/write at the DB level — anyone with devtools can query hidden docs. By design (Brian: "I'm okay with that"). Reorder edge case unchanged: viewer reordering still writes sortOrders for visible projects only, which can shuffle hidden ones in owner's view. Low impact, document only.
 - **Next:** None.
+
+### 2026-05-25 — Removed Content Calendar → B Things daily sync
+- **What shipped:** Deleted the Vercel cron from `vercel.json` (was `0 12 * * *` calling `/api/content-today`) and removed `api/content-today.js` entirely. Brian doesn't want content cards auto-pushed to B Things anymore — too much cognitive clutter. Previously-auto-synced tasks (those with `sourceCardId`) remain as regular B Things tasks. The Slack/Telegram `notifyNicoOnContentStatusChange` Firestore trigger in brain-inbox is unrelated and stays.
+- **Known issues:** Mount cosmetic artifact — `api/content-today.js` will appear as an untracked file in `git status` on Brian's Mac (FUSE can't unlink). Safe to ignore; `rm` it whenever. Does NOT affect the deploy: Vercel only ships committed files.
+- **Next:** None.

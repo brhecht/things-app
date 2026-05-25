@@ -1,8 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/content-today",
-      "schedule": "0 12 * * *"
-    }
-  ]
-}
+{}
