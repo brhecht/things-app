@@ -77,3 +77,8 @@ None.
 - **What shipped:** New `infra` project (slate accents). PROJECT_MAP in `api/add-task.js` accepts "infra", "b-suite", "b suite", "bsuite". One-time auto-injection in store.js (matches the `network`/`from-nico` pattern) so it shows up in existing users' Firestore on next app load. Color maps + sort order updated across all 7 components (Sidebar, AgendaView, MobileAgendaView, MobileProjectList, CompletedView, KanbanBoard).
 - **Known issues:** Test task `__INFRA_TEST__ delete me` (created during deploy verification) — delete from UI.
 - **Next:** None.
+
+### 2026-05-25 — Per-project "Hide from Viewer" (cognitive-load filter)
+- **What shipped:** Owner can mark any project hidden from collaborator (Nico). Toggle is the eye/eye-off icon revealed on hover in the Sidebar; persistent eye-off + italic name marks a hidden project in owner's view. Store now keeps `_rawProjects`/`_rawTasks` and filters `projects`/`tasks` when `isViewer === true` (filters out hidden projects + their tasks). New action `toggleProjectHidden(id)` writes `hiddenFromViewers: true/false` to the project doc. Default false — no existing project changes state on deploy.
+- **Known issues:** This is a UI filter, not access control. Viewers still have Firestore read/write at the DB level — anyone with devtools can query hidden docs. By design (Brian: "I'm okay with that"). Reorder edge case unchanged: viewer reordering still writes sortOrders for visible projects only, which can shuffle hidden ones in owner's view. Low impact, document only.
+- **Next:** None.

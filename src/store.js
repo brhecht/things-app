@@ -69,6 +69,12 @@ const useStore = create((set, get) => ({
   tasks: [],
   selectedProjectId: null,
 
+  // ── Internal: raw (unfiltered) snapshots from Firestore ───────
+  // For owner, raw === projects/tasks. For viewer, raw is the full
+  // dataset and projects/tasks are filtered (hiddenFromViewers).
+  _rawProjects: [],
+  _rawTasks: [],
+
   // ── Undo stack ───────────────────────────────────────────────
   _undoStack: [],   // [{ type: 'update'|'delete', snapshot: {...} }]
   _undoToast: null, // string message to show, or null
@@ -88,7 +94,7 @@ const useStore = create((set, get) => ({
     if (_unsubTasks) _unsubTasks()
     if (_unsubProjects) _unsubProjects()
     await logOut()
-    set({ user: null, isViewer: false, dataUid: null, tasks: [], projects: [], selectedProjectId: null, _unsubTasks: null, _unsubProjects: null })
+    set({ user: null, isViewer: false, dataUid: null, tasks: [], projects: [], _rawTasks: [], _rawProjects: [], selectedProjectId: null, _unsubTasks: null, _unsubProjects: null })
   },
 
   /** Call once at app startup to listen to auth changes. */
@@ -120,7 +126,7 @@ const useStore = create((set, get) => ({
           set({ user: null, authLoading: false, isViewer: false, dataUid: null })
         }
       } else {
-        set({ user: null, authLoading: false, isViewer: false, dataUid: null, tasks: [], projects: [] })
+        set({ user: null, authLoading: false, isViewer: false, dataUid: null, tasks: [], projects: [], _rawTasks: [], _rawProjects: [] })
       }
     })
   },
@@ -174,7 +180,21 @@ const useStore = create((set, get) => ({
         const bo = b.sortOrder != null ? b.sortOrder : (LEGACY_ORDER.indexOf(b.id) !== -1 ? LEGACY_ORDER.indexOf(b.id) : 999)
         return ao - bo
       })
-      set({ projects })
+
+      // Per-viewer visibility filter (cognitive-load filter, not security).
+      // Owner sees everything (raw === visible). Viewer (Nico) sees only
+      // projects without hiddenFromViewers === true. Tasks are re-filtered
+      // from _rawTasks against the new visible-project set so that toggling
+      // a project's hidden flag instantly restores/removes its tasks too.
+      const { isViewer, _rawTasks } = get()
+      const visibleProjects = isViewer
+        ? projects.filter((p) => !p.hiddenFromViewers)
+        : projects
+      const visibleProjectIds = new Set(visibleProjects.map((p) => p.id))
+      const visibleTasks = isViewer
+        ? _rawTasks.filter((t) => !t.projectId || visibleProjectIds.has(t.projectId))
+        : _rawTasks
+      set({ _rawProjects: projects, projects: visibleProjects, tasks: visibleTasks })
     })
 
     const unsubTasks = subscribeTasks(userId, (tasks) => {
@@ -184,7 +204,14 @@ const useStore = create((set, get) => ({
           upsertTask(userId, { ...t, projectId: 'unassigned' })
         }
       })
-      set({ tasks })
+
+      // Filter against the current visible-project set (see _startSync notes).
+      const { isViewer, projects: currentVisibleProjects } = get()
+      const visibleProjectIds = new Set(currentVisibleProjects.map((p) => p.id))
+      const visibleTasks = isViewer
+        ? tasks.filter((t) => !t.projectId || visibleProjectIds.has(t.projectId))
+        : tasks
+      set({ _rawTasks: tasks, tasks: visibleTasks })
     })
 
     set({ _unsubTasks: unsubTasks, _unsubProjects: unsubProjects })
@@ -213,6 +240,21 @@ const useStore = create((set, get) => ({
     // Also delete all tasks in that project
     tasks.filter((t) => t.projectId === id).forEach((t) => removeTask(dataUid, t.id))
     if (selectedProjectId === id) set({ selectedProjectId: null })
+  },
+
+  /**
+   * Toggle hiddenFromViewers on a project. Owner-only action — when true,
+   * the project and all its tasks disappear from Nico's view. This is a
+   * cognitive-load filter, not access control: viewers still have Firestore
+   * read/write at the DB level. Defaults to off for new projects.
+   */
+  toggleProjectHidden: (id) => {
+    const { user, dataUid, isViewer, _rawProjects, projects } = get()
+    if (!user || !dataUid || isViewer) return
+    // Owner sees full list in `projects`, but _rawProjects is the source of truth.
+    const proj = _rawProjects.find((p) => p.id === id) || projects.find((p) => p.id === id)
+    if (!proj) return
+    upsertProject(dataUid, { ...proj, hiddenFromViewers: !proj.hiddenFromViewers })
   },
 
   // ── Undo helpers ──────────────────────────────────────────────

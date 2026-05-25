@@ -54,7 +54,7 @@ function InlineInput({ placeholder, onSubmit, onCancel }) {
 }
 
 export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
-  const { user, signOut, projects, selectedProjectId, setSelectedProject, addProject, reorderProjects } = useStore()
+  const { user, signOut, projects, selectedProjectId, setSelectedProject, addProject, reorderProjects, toggleProjectHidden, isViewer } = useStore()
   const [addingProject, setAddingProject] = useState(false)
   const [dragIdx, setDragIdx] = useState(null)
   const [dropIdx, setDropIdx] = useState(null)
@@ -141,7 +141,7 @@ export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
             onDragStart={(e) => { setDragIdx(idx); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', '') }}
             onDragEnd={() => { if (dragIdx != null && dropIdx != null && dragIdx !== dropIdx) reorderProjects(dragIdx, dropIdx); setDragIdx(null); setDropIdx(null) }}
             onDragOver={(e) => { e.preventDefault(); setDropIdx(idx) }}
-            className="relative"
+            className="relative group"
           >
             {/* Drop indicator line */}
             {dragIdx != null && dropIdx === idx && dropIdx !== dragIdx && (
@@ -153,12 +153,41 @@ export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
                 dragIdx === idx ? 'opacity-40' : ''
               } ${
                 selectedProjectId === proj.id ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700/60'
-              }`}
+              } ${!isViewer ? 'pr-9' : ''}`}
             >
               <span className="text-gray-600 cursor-grab text-[10px] leading-none mr-0.5">⠿</span>
               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${DOT_COLORS[proj.id] || 'bg-gray-400'}`} />
-              <span className="truncate">{proj.name}</span>
+              <span className={`truncate ${proj.hiddenFromViewers ? 'italic text-gray-400' : ''}`}>{proj.name}</span>
             </button>
+            {/* Owner-only visibility toggle. Sibling (not nested in <button>) to
+                avoid invalid interactive-nesting. Eye-off persists when hidden;
+                otherwise reveals on row hover. */}
+            {!isViewer && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggleProjectHidden(proj.id) }}
+                title={proj.hiddenFromViewers ? 'Hidden from Nico — click to show' : 'Visible to Nico — click to hide'}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded transition-opacity hover:bg-gray-600/60 ${
+                  proj.hiddenFromViewers ? 'opacity-100 text-amber-400' : 'opacity-0 group-hover:opacity-60 text-gray-400 hover:opacity-100'
+                }`}
+              >
+                {proj.hiddenFromViewers ? (
+                  /* eye-off */
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                    <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                    <line x1="2" y1="2" x2="22" y2="22" />
+                  </svg>
+                ) : (
+                  /* eye */
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            )}
           </div>
         ))}
 
