@@ -20,6 +20,48 @@ const PROJECT_MAP = {
   'misc':              'misc',
 }
 
+// Timing words → bucket. Checked at the END (preferred) or START of the dictated
+// sentence so a word mid-title (e.g. "tomorrow's meeting") isn't misread.
+const TIMING = [
+  ['this\\s*week', 'soon'],
+  ['tomorrow', 'tomorrow'],
+  ['today', 'today'],
+  ['some\\s*day|later', 'someday'],
+  ['waiting|delegate', 'waiting'],
+]
+
+// Parse a single dictated sentence from the capture Shortcut into structured
+// fields. Pulls a timing word into a bucket and text after a "note" marker into
+// notes; the remainder is the title. Conservative on purpose — only strong
+// markers (", note", "note:", edge-anchored timing words) trigger a split.
+function parseDictation(raw) {
+  let text = (raw || '').trim()
+  let notes = ''
+  let bucket = null
+
+  // 1) Notes — strong markers only: ", note ..." or "note: ..."
+  let m = text.match(/,\s*notes?\b:?\s+([\s\S]+)$/i)
+  if (!m) m = text.match(/(?:^|\s)notes?:\s+([\s\S]+)$/i)
+  if (m) {
+    notes = m[1].trim()
+    text = text.slice(0, m.index).trim()
+  }
+
+  // 2) Timing word at the END (preferred), or at the START only when followed by
+  //    a comma ("Tomorrow, call Bob") — avoids eating leading verbs like "Wait".
+  for (const [pat, b] of TIMING) {
+    const endRe = new RegExp(`[\\s,;:.-]*\\b(?:${pat})\\b[\\s.!]*$`, 'i')
+    const startRe = new RegExp(`^(?:${pat})\\b\\s*,\\s*`, 'i')
+    if (endRe.test(text)) { bucket = b; text = text.replace(endRe, '').trim(); break }
+    if (startRe.test(text)) { bucket = b; text = text.replace(startRe, '').trim(); break }
+  }
+
+  // If the sentence was only a note ("note: buy milk"), promote it to the title.
+  if (!text && notes) { text = notes; notes = '' }
+
+  return { title: text.trim(), bucket, notes }
+}
+
 function getDb() {
   if (!getApps().length) {
     initializeApp({
@@ -42,11 +84,18 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    const { title, project, projectId: directProjectId, bucket, notes, dueDate, idempotencyKey } = req.body
+    const { title, project, projectId: directProjectId, bucket, notes, priority, tags, dueDate, idempotencyKey } = req.body
 
     if (!title || typeof title !== 'string') {
       return res.status(400).json({ error: 'Missing "title" field' })
     }
+
+    // Parse the raw dictated sentence (timing word → bucket, "note ..." → notes).
+    // Explicit fields in the request body always win over parsed values.
+    const parsed = parseDictation(title)
+    const finalTitle = parsed.title || title.trim()
+    const finalNotes = (typeof notes === 'string' && notes.trim()) ? notes : parsed.notes
+    const finalBucket = bucket || parsed.bucket || 'inbox'
 
     const db = getDb()
     const OWNER_UID = process.env.OWNER_UID
@@ -73,12 +122,12 @@ export default async function handler(req, res) {
     const taskId = `eddy-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
     const task = {
       id: taskId,
-      title: title.trim(),
+      title: finalTitle,
       projectId,
-      bucket: bucket || 'inbox',
-      priority: null,
-      notes: notes || '',
-      tags: [],
+      bucket: finalBucket,
+      priority: priority || null,
+      notes: finalNotes || '',
+      tags: Array.isArray(tags) ? tags : [],
       starred: false,
       completed: false,
       sortWeight: 0,

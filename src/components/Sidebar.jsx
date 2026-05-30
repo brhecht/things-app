@@ -54,7 +54,8 @@ function InlineInput({ placeholder, onSubmit, onCancel }) {
 }
 
 export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
-  const { user, signOut, projects, selectedProjectId, setSelectedProject, addProject, reorderProjects, toggleProjectHidden, isViewer } = useStore()
+  const { user, signOut, projects, tasks, selectedProjectId, setSelectedProject, addProject, reorderProjects, toggleProjectHidden, isViewer } = useStore()
+  const unassignedCount = tasks.filter((t) => (!t.projectId || t.projectId === 'unassigned') && !t.completed).length
   const [addingProject, setAddingProject] = useState(false)
   const [dragIdx, setDragIdx] = useState(null)
   const [dropIdx, setDropIdx] = useState(null)
@@ -133,8 +134,24 @@ export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
           <span>All Tasks</span>
         </button>
 
-        {/* Projects (draggable to reorder) */}
-        {projects.map((proj, idx) => (
+        {/* Unassigned — pinned triage queue (captures land here until given a project) */}
+        <button
+          onClick={() => setSelectedProject('unassigned')}
+          className={`w-full text-left flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+            selectedProjectId === 'unassigned' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700/60'
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${DOT_COLORS['unassigned']}`} />
+          <span className="flex-1 truncate">Unassigned</span>
+          {unassignedCount > 0 && (
+            <span className="flex-shrink-0 text-[11px] font-semibold text-amber-900 bg-amber-300 rounded-full px-1.5 py-0.5 leading-none min-w-[18px] text-center">
+              {unassignedCount}
+            </span>
+          )}
+        </button>
+
+        {/* Projects (draggable to reorder) — Unassigned is pinned above, skip it here */}
+        {projects.map((proj, idx) => proj.id === 'unassigned' ? null : (
           <div
             key={proj.id}
             draggable
