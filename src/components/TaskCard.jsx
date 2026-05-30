@@ -37,7 +37,9 @@ export default function TaskCard({ task, onClick }) {
     deleteTask(task.id)
   }
 
-  const borderClass = PRIORITY_BORDER[task.priority] || ''
+  const isUnassigned = !task.projectId || task.projectId === 'unassigned'
+  // Priority stripe wins if set; otherwise an amber stripe flags unassigned (un-triaged) cards.
+  const borderClass = PRIORITY_BORDER[task.priority] || (isUnassigned ? 'border-l-[3px] border-l-amber-400' : '')
 
   return (
     <div
@@ -49,14 +51,6 @@ export default function TaskCard({ task, onClick }) {
       onMouseLeave={() => setShowTooltip(false)}
       className={`group relative bg-white rounded-xl border border-gray-100 p-3 cursor-pointer hover:shadow-md hover:border-gray-200 transition-all select-none shadow-sm ${borderClass}`}
     >
-      {/* Unassigned flag — top-right corner dot draws the eye to cards needing a project */}
-      {(!task.projectId || task.projectId === 'unassigned') && (
-        <span
-          className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-white z-10"
-          title="Unassigned — needs a project"
-        />
-      )}
-
       {/* Tooltip */}
       {showTooltip && (
         <div className="absolute left-0 right-0 -top-1 -translate-y-full z-50 pointer-events-none px-1">
