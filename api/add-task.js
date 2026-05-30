@@ -20,8 +20,7 @@ const PROJECT_MAP = {
   'misc':              'misc',
 }
 
-// Timing words → bucket. Checked at the END (preferred) or START of the dictated
-// sentence so a word mid-title (e.g. "tomorrow's meeting") isn't misread.
+// Timing words → bucket.
 const TIMING = [
   ['this\\s*week', 'soon'],
   ['tomorrow', 'tomorrow'],
@@ -30,36 +29,57 @@ const TIMING = [
   ['waiting|delegate', 'waiting'],
 ]
 
-// Parse a single dictated sentence from the capture Shortcut into structured
-// fields. Pulls a timing word into a bucket and text after a "note" marker into
-// notes; the remainder is the title. Conservative on purpose — only strong
-// markers (", note", "note:", edge-anchored timing words) trigger a split.
+// Strip a trailing timing phrase from a string, eating a natural lead-in
+// ("do it"/"do this"/"for"/"by") so "do it tomorrow" / "by tomorrow" fully drop
+// out, not just the bare word. Returns { text, bucket }.
+function stripTrailingTiming(s) {
+  for (const [pat, b] of TIMING) {
+    const re = new RegExp(`[\\s,;:.-]*\\b(?:do (?:it|this)|for|by)?\\s*(?:${pat})\\b[\\s.!]*$`, 'i')
+    if (re.test(s)) return { text: s.replace(re, '').trim(), bucket: b }
+  }
+  return { text: s, bucket: null }
+}
+
+// Parse a single dictated sentence into { title, bucket, notes }. Built for
+// spoken input: dictation rarely inserts commas/colons, so the note marker is
+// the bare word "note" (singular, so "release notes" won't false-match), and a
+// timing phrase may land before the note ("X tomorrow, note Y") or at the very
+// end after it ("X note Y do it tomorrow").
 function parseDictation(raw) {
   let text = (raw || '').trim()
   let notes = ''
   let bucket = null
 
-  // 1) Notes — strong markers only: ", note ..." or "note: ..."
-  let m = text.match(/,\s*notes?\b:?\s+([\s\S]+)$/i)
-  if (!m) m = text.match(/(?:^|\s)notes?:\s+([\s\S]+)$/i)
+  // 1) Notes — split at the first standalone singular "note" marker (handles
+  //    typed ", note"/"note:" and dictated "... note. ...").
+  const m = text.match(/(?:^|[\s,])note\b[:.]?\s+([\s\S]+)$/i)
   if (m) {
     notes = m[1].trim()
-    text = text.slice(0, m.index).trim()
+    text = text.slice(0, m.index).replace(/[\s,]+$/, '').trim()
   }
 
-  // 2) Timing word at the END (preferred), or at the START only when followed by
-  //    a comma ("Tomorrow, call Bob") — avoids eating leading verbs like "Wait".
-  for (const [pat, b] of TIMING) {
-    const endRe = new RegExp(`[\\s,;:.-]*\\b(?:${pat})\\b[\\s.!]*$`, 'i')
-    const startRe = new RegExp(`^(?:${pat})\\b\\s*,\\s*`, 'i')
-    if (endRe.test(text)) { bucket = b; text = text.replace(endRe, '').trim(); break }
-    if (startRe.test(text)) { bucket = b; text = text.replace(startRe, '').trim(); break }
+  // 2) Timing — try the end of the head first, then the end of the notes, then a
+  //    start-of-sentence form with a comma ("Tomorrow, call Bob").
+  let r = stripTrailingTiming(text)
+  if (r.bucket) { text = r.text; bucket = r.bucket }
+  else if (notes) {
+    r = stripTrailingTiming(notes)
+    if (r.bucket) { notes = r.text; bucket = r.bucket }
+  }
+  if (!bucket) {
+    for (const [pat, b] of TIMING) {
+      const startRe = new RegExp(`^(?:${pat})\\b\\s*,\\s*`, 'i')
+      if (startRe.test(text)) { bucket = b; text = text.replace(startRe, '').trim(); break }
+    }
   }
 
-  // If the sentence was only a note ("note: buy milk"), promote it to the title.
+  // Note-only utterance ("note: buy milk") → promote to title.
   if (!text && notes) { text = notes; notes = '' }
 
-  return { title: text.trim(), bucket, notes }
+  // Trim trailing sentence punctuation dictation tends to add.
+  text = text.replace(/[\s.,;:]+$/, '').trim()
+
+  return { title: text, bucket, notes }
 }
 
 function getDb() {
