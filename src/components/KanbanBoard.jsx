@@ -12,6 +12,15 @@ const BUCKETS = [
   { id: 'someday',  label: 'Later',  accent: 'text-gray-500',   border: 'border-gray-200',   dropBg: 'bg-gray-100',  count: 'bg-gray-100 text-gray-500',     defaultFlex: 1, minW: 100 },
 ]
 
+const KNOWN_BUCKETS = new Set(BUCKETS.map((b) => b.id))
+// Any task whose bucket is missing or unrecognized falls into Inbox, so a task can never
+// be counted-but-invisible (otherwise it haunts the badge with no way to reach it).
+const bucketOf = (t) => (KNOWN_BUCKETS.has(t.bucket) ? t.bucket : 'inbox')
+// The pinned "Unassigned" view catches both projectId === 'unassigned' and tasks with no
+// project at all, so the board and the sidebar badge always agree.
+const matchesProject = (t, pid) =>
+  pid === 'unassigned' ? (!t.projectId || t.projectId === 'unassigned') : t.projectId === pid
+
 const PROJECT_COLORS = {
   'hc-admin':         'bg-blue-100 text-blue-700',
   'hc-content':       'bg-emerald-100 text-emerald-700',
@@ -296,7 +305,7 @@ export default function KanbanBoard({ filters }) {
 
   // Base visibility: project filter + not completed
   let visibleTasks = selectedProjectId
-    ? tasks.filter((t) => t.projectId === selectedProjectId && !t.completed)
+    ? tasks.filter((t) => matchesProject(t, selectedProjectId) && !t.completed)
     : tasks.filter((t) => !t.completed)
 
   // Apply filters
@@ -324,7 +333,7 @@ export default function KanbanBoard({ filters }) {
         <div className="flex min-h-full w-max">
           {BUCKETS.filter((bucket) => {
             // Hide inbox column when it has no tasks
-            if (bucket.id === 'inbox' && visibleTasks.filter((t) => t.bucket === 'inbox').length === 0) return false
+            if (bucket.id === 'inbox' && visibleTasks.filter((t) => bucketOf(t) === 'inbox').length === 0) return false
             return true
           }).map((bucket, i, arr) => (
             <div key={bucket.id} data-col-wrapper className="flex" style={{ flex: colWidths[bucket.id] ? `0 0 ${colWidths[bucket.id]}px` : `${bucket.defaultFlex} 1 0%`, minWidth: bucket.minW }}>
@@ -333,7 +342,7 @@ export default function KanbanBoard({ filters }) {
               )}
               <Column
                 bucket={bucket}
-                tasks={visibleTasks.filter((t) => t.bucket === bucket.id)}
+                tasks={visibleTasks.filter((t) => bucketOf(t) === bucket.id)}
                 projects={projects}
                 onTaskClick={setSelectedTask}
               />
