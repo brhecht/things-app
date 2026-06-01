@@ -86,14 +86,16 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
     }
   }
 
-  // Split tasks: ones with a project vs unassigned (inbox items)
+  // Unassigned (no project OR the "unassigned" project = fresh captures). Render these at the
+  // TOP of every column, newest first, so new captures jump out instead of hiding at the bottom.
   const unassigned = tasks
-    .filter((t) => !t.projectId)
+    .filter((t) => !t.projectId || t.projectId === 'unassigned')
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
 
-  // Group tasks by project, maintaining project list order
+  // Group remaining tasks by project, maintaining project list order (unassigned handled above).
   // Within each project: starred first, then by sortWeight (highest = most recently starred/promoted)
   const grouped = projects
+    .filter((proj) => proj.id !== 'unassigned')
     .map((proj) => ({
       proj,
       tasks: tasks
