@@ -33,9 +33,9 @@ const LEGACY_ORDER = [
 
 // Default projects for brand-new users (first sign-in)
 const SEED_PROJECTS = [
-  { id: 'hc-admin',         name: 'Humble Admin',      sortOrder: 0 },
-  { id: 'hc-content',       name: 'HC Content',        sortOrder: 1 },
-  { id: 'hc-revenue',       name: 'HC Revenue',        sortOrder: 2 },
+  { id: 'hc-admin',         name: 'TNB Admin',         sortOrder: 0 },
+  { id: 'hc-content',       name: 'TNB Content',       sortOrder: 1 },
+  { id: 'hc-revenue',       name: 'TNB Revenue',       sortOrder: 2 },
   { id: 'portfolio',        name: 'Portfolio',          sortOrder: 3 },
   { id: 'life-admin',       name: 'Life Admin',        sortOrder: 4 },
   { id: 'personal-finance', name: 'Personal Finance',  sortOrder: 5 },
@@ -172,6 +172,26 @@ const useStore = create((set, get) => ({
       if (!projects.find((p) => p.id === 'infra')) {
         upsertProject(userId, { id: 'infra', name: 'Infra' })
         return // snapshot will re-fire with the new project
+      }
+
+      // ── One-time TNB rebrand: rename HC/Humble projects (idempotent) ──
+      // Production host + owner only. Renames by stable id and only when the
+      // current name still matches the old label, so it never fights a later
+      // manual rename and is safe to leave in place permanently.
+      const onProdHost = typeof window !== 'undefined' && window.location.hostname === 'things-app-gamma.vercel.app'
+      if (onProdHost && !get().isViewer) {
+        const TNB_RENAMES = {
+          'hc-admin':            { from: 'Humble Admin', to: 'TNB Admin' },
+          'hc-content':          { from: 'HC Content',   to: 'TNB Content' },
+          'hc-revenue':          { from: 'HC Revenue',   to: 'TNB Revenue' },
+          'id-1779739492055-1':  { from: 'HC Growth',    to: 'TNB Growth' },
+        }
+        let _renamed = false
+        projects.forEach((p) => {
+          const r = TNB_RENAMES[p.id]
+          if (r && p.name === r.from) { upsertProject(userId, { ...p, name: r.to }); _renamed = true }
+        })
+        if (_renamed) return // snapshot re-fires with renamed data
       }
 
       // Sort projects by sortOrder (falling back to legacy order for projects without one)

@@ -3,10 +3,15 @@ import { getFirestore } from 'firebase-admin/firestore'
 
 // Project name → id mapping for Slack shorthand tags
 const PROJECT_MAP = {
+  'tnb admin':         'hc-admin',
   'humble admin':      'hc-admin',
   'hc admin':          'hc-admin',
+  'tnb content':       'hc-content',
   'hc content':        'hc-content',
+  'tnb revenue':       'hc-revenue',
   'hc revenue':        'hc-revenue',
+  'tnb growth':        'id-1779739492055-1',
+  'hc growth':         'id-1779739492055-1',
   'portfolio':         'portfolio',
   'life admin':        'life-admin',
   'personal finance':  'personal-finance',
