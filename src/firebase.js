@@ -108,6 +108,17 @@ export async function getOwnerUid() {
   return snap.exists() ? snap.data().uid : null
 }
 
+/** Read the one-time migration flags doc (appConfig/migrations). */
+export async function getMigrationsDoc() {
+  const snap = await getDoc(doc(db, 'appConfig', 'migrations'))
+  return snap.exists() ? snap.data() : {}
+}
+
+/** Mark a one-time migration as applied. */
+export function setMigrationFlag(key) {
+  return setDoc(doc(db, 'appConfig', 'migrations'), { [key]: true }, { merge: true })
+}
+
 /** Register a viewer so Firestore rules allow them to read. */
 export function registerViewer(ownerUid, viewerUid) {
   return setDoc(doc(db, 'users', ownerUid, 'viewers', viewerUid), { granted: true })

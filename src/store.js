@@ -14,6 +14,8 @@ import {
   batchUpsertProjects,
   saveOwnerUid,
   getOwnerUid,
+  getMigrationsDoc,
+  setMigrationFlag,
   registerViewer,
 } from './firebase'
 
@@ -23,6 +25,35 @@ const ALLOWED_COLLABORATORS = ['nico@humbleconviction.com', 'nmejiawork@gmail.co
 
 let counter = 1
 const uid = () => `id-${Date.now()}-${counter++}`
+
+// ── One-time TNB reorder (Task 3) ────────────────────────────────
+// TNB block pinned on top in current visual order (Admin, Content, Growth,
+// Revenue); everything else descending by task frequency (snapshot 2026-06-09).
+// Persisted once via appConfig/migrations.tnbReorder2026 so it never overrides
+// a later manual drag-reorder. Session guard avoids re-reading every snapshot.
+const TNB_ORDER = {
+  'hc-admin': 0, 'hc-content': 1, 'id-1779739492055-1': 2, 'hc-revenue': 3,
+  'from-nico': 4, 'id-1772142500118-1': 5, 'network': 6, 'life-admin': 7,
+  'personal-finance': 8, 'id-1772471089249-4': 9, 'id-1772471094681-5': 10,
+  'id-1772480834448-1': 11, 'friends': 12, 'infra': 13, 'id-1780351450507-1': 14,
+  'georgetown': 15, 'portfolio': 16, 'id-1772489672103-1': 17, 'id-1772719720553-1': 18,
+}
+let _tnbReorderChecked = false
+async function maybeApplyTnbReorder(userId, projects) {
+  if (_tnbReorderChecked) return
+  _tnbReorderChecked = true
+  try {
+    const flags = await getMigrationsDoc()
+    if (flags.tnbReorder2026) return
+    const updates = projects
+      .filter((p) => p.id in TNB_ORDER)
+      .map((p) => ({ id: p.id, sortOrder: TNB_ORDER[p.id] }))
+    if (updates.length) await batchUpsertProjects(userId, updates)
+    await setMigrationFlag('tnbReorder2026')
+  } catch (e) {
+    _tnbReorderChecked = false // allow retry next session on failure
+  }
+}
 
 // Fallback display order for projects that don't have a sortOrder yet
 const LEGACY_ORDER = [
@@ -193,6 +224,9 @@ const useStore = create((set, get) => ({
         })
         if (_renamed) return // snapshot re-fires with renamed data
       }
+
+      // Task 3: one-time frequency reorder (prod + owner only, guarded marker)
+      if (onProdHost && !get().isViewer) maybeApplyTnbReorder(userId, projects)
 
       // Sort projects by sortOrder (falling back to legacy order for projects without one)
       projects.sort((a, b) => {
