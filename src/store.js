@@ -225,6 +225,24 @@ const useStore = create((set, get) => ({
         }
       })
 
+      // ── One-time: retire the Eddy category (Eddy business killed Apr 2026) ──
+      // Prod host + owner only. Reassign Eddy's tasks to Unassigned FIRST; only
+      // once none remain do we delete the project doc — guarantees no task is
+      // ever orphaned to a deleted project. Idempotent: no Eddy tasks + no Eddy
+      // project = no-op.
+      {
+        const onProdHost = typeof window !== 'undefined' && window.location.hostname === 'things-app-gamma.vercel.app'
+        if (onProdHost && !get().isViewer) {
+          const EDDY_ID = 'id-1773186280183-1'
+          const eddyTasks = tasks.filter((t) => t.projectId === EDDY_ID)
+          if (eddyTasks.length > 0) {
+            eddyTasks.forEach((t) => upsertTask(userId, { ...t, projectId: 'unassigned' }))
+          } else if (get()._rawProjects.find((p) => p.id === EDDY_ID)) {
+            removeProject(userId, EDDY_ID)
+          }
+        }
+      }
+
       // Filter against the current visible-project set (see _startSync notes).
       const { isViewer, projects: currentVisibleProjects } = get()
       const visibleProjectIds = new Set(currentVisibleProjects.map((p) => p.id))
