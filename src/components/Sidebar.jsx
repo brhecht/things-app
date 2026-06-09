@@ -134,6 +134,19 @@ export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
           <span>All Tasks</span>
         </button>
 
+        {/* Starred only — quick filter, pinned at top */}
+        <button
+          onClick={() => setFilters((prev) => ({ ...prev, starred: !prev.starred }))}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+            filters.starred ? 'bg-yellow-500/20 text-yellow-300' : 'text-gray-300 hover:bg-gray-700/60'
+          }`}
+        >
+          <span className={`text-base leading-none ${filters.starred ? 'text-yellow-400' : ''}`}>
+            {filters.starred ? '★' : '☆'}
+          </span>
+          <span>Starred only</span>
+        </button>
+
         {/* Unassigned — pinned triage queue (captures land here until given a project) */}
         <button
           onClick={() => setSelectedProject('unassigned')}
@@ -237,19 +250,6 @@ export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
               </button>
             )}
           </div>
-
-          {/* Starred toggle */}
-          <button
-            onClick={() => setFilters((prev) => ({ ...prev, starred: !prev.starred }))}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-              filters.starred ? 'bg-yellow-500/20 text-yellow-300' : 'text-gray-400 hover:bg-gray-700/60 hover:text-gray-300'
-            }`}
-          >
-            <span className={`text-base leading-none ${filters.starred ? 'text-yellow-400' : ''}`}>
-              {filters.starred ? '★' : '☆'}
-            </span>
-            <span>Starred only</span>
-          </button>
 
           {/* Priority filters */}
           {['high', 'medium', 'low'].map((p) => {
