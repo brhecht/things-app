@@ -241,9 +241,10 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
         ) : (
           <button
             onClick={() => { setNewProjectId(selectedProjectId || projects[0]?.id || ''); setAdding(true) }}
-            className="w-full text-left text-sm text-gray-300 hover:text-gray-500 px-1 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+            className="relative w-full text-left text-sm text-gray-300 hover:text-gray-500 px-1 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
           >
             + Add task
+            <span className="absolute top-1 right-1.5 text-[9px] text-gray-200 leading-none select-none pointer-events-none">✦</span>
           </button>
         )}
       </div>
