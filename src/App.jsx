@@ -9,6 +9,7 @@ import MobileBottomNav from './components/MobileBottomNav'
 import MobileQuickAdd from './components/MobileQuickAdd'
 import MobileProjectList from './components/MobileProjectList'
 import CompletedView from './components/CompletedView'
+import GamePlanView from './components/GamePlanView'
 import TaskModal from './components/TaskModal'
 import SignInPage from './components/SignInPage'
 import AppSwitcher from './AppSwitcher'
@@ -16,7 +17,7 @@ import AppSwitcher from './AppSwitcher'
 export default function App() {
   const { user, authLoading, isViewer, initAuth, undo, _undoToast, _undoStack, setSelectedProject, selectedProjectId, tasks } = useStore()
   const [filters, setFilters] = useState({ starred: false, priorities: [] })
-  const [view, setView] = useState('kanban') // 'kanban' | 'agenda' | 'completed'
+  const [view, setView] = useState('kanban') // 'kanban' | 'agenda' | 'completed' | 'gameplan'
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const isMobile = useIsMobile()
 
@@ -208,10 +209,20 @@ export default function App() {
           >
             Completed
           </button>
+          <button
+            onClick={() => setView('gameplan')}
+            className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+              view === 'gameplan' ? 'bg-white text-gray-800 shadow-sm border border-gray-200' : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            Game Plan
+          </button>
         </div>
         <div className="flex-1 overflow-hidden">
           {view === 'completed' ? (
             <CompletedView />
+          ) : view === 'gameplan' ? (
+            <GamePlanView />
           ) : view === 'kanban' ? (
             <KanbanBoard filters={filters} />
           ) : (
