@@ -36,6 +36,16 @@ export default function App() {
     initAuth()
   }, [])
 
+  // Parse ?view= param to deep-link into a specific view on load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const viewParam = params.get('view')
+    if (viewParam && ['kanban', 'agenda', 'completed', 'gameplan'].includes(viewParam)) {
+      setView(viewParam)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
+
   // Parse ?task= param and open modal once tasks are loaded
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
