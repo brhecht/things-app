@@ -47,6 +47,7 @@ export default function GamePlanView() {
   const [editingId, setEditingId] = useState(null)
   const [askMsg, setAskMsg] = useState('')
   const [draggingId, setDraggingId] = useState(null)
+  const [gpTab, setGpTab] = useState('setup') // 'setup' | 'run'
   const dateKey = todayKey()
 
   // 1-second ticker
@@ -245,15 +246,44 @@ export default function GamePlanView() {
         <div className="flex items-end justify-between mb-4">
           <div>
             <h1 className="text-[17px] font-medium text-[#2c2c2a]">Today's game plan</h1>
-            <p className="text-[12px] text-[#888780] mt-0.5">projects from now · tap to finish · drag to reorder</p>
+            <p className="text-[12px] text-[#888780] mt-0.5">
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </p>
           </div>
           <div className="text-right">
             <div className="text-[19px] font-medium tabular-nums text-[#2c2c2a]">{fmt(now)}</div>
-            <div className="text-[11px] text-[#888780]">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-            </div>
           </div>
         </div>
+
+        {/* Sub-tabs: Setup | Run */}
+        <div className="flex gap-1 mb-5 bg-[#f0ede6] rounded-lg p-1 w-fit">
+          {['setup', 'run'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setGpTab(tab)}
+              className={`text-[12.5px] font-medium px-4 py-1.5 rounded-md capitalize transition-colors ${
+                gpTab === tab
+                  ? 'bg-white text-[#2c2c2a] shadow-sm'
+                  : 'text-[#888780] hover:text-[#5f5e5a]'
+              }`}
+            >
+              {tab === 'setup' ? '⊞ Setup' : '▷ Run'}
+            </button>
+          ))}
+        </div>
+
+        {/* ── SETUP TAB ─────────────────────────────────────────── */}
+        {gpTab === 'setup' && (
+          <SetupTable
+            tasks={todayTasks}
+            gp={gp}
+            update={update}
+            onLaunch={() => setGpTab('run')}
+          />
+        )}
+
+        {/* ── RUN TAB ───────────────────────────────────────────── */}
+        {gpTab === 'run' && <>
 
         {/* How am I doing */}
         <div className="mb-3">
@@ -485,6 +515,129 @@ export default function GamePlanView() {
           </div>
         )}
 
+        </> /* end run tab */}
+
+      </div>
+    </div>
+  )
+}
+
+// ── SetupTable ────────────────────────────────────────────────────
+// Morning setup: configure brainspace + time for every task in one grid.
+// `tasks` is already filtered to today's non-completed tasks.
+function SetupTable({ tasks: todayTasks, gp, update, onLaunch }) {
+  // Local estimate edits tracked by taskId
+  const [estInputs, setEstInputs] = useState({})
+
+  function setBs(taskId, bs) {
+    update({ brainspace: { ...gp.brainspace, [taskId]: bs } })
+  }
+
+  function commitEst(taskId, val) {
+    const v = parseInt(val, 10)
+    if (v > 0) update({ estimates: { ...gp.estimates, [taskId]: v } })
+    setEstInputs(prev => { const n = { ...prev }; delete n[taskId]; return n })
+  }
+
+  const allSet = todayTasks.length > 0 && todayTasks.every(t =>
+    gp.brainspace[t.id] && gp.brainspace[t.id] !== 'medium'
+  )
+
+  if (todayTasks.length === 0) {
+    return (
+      <div className="text-center text-[13px] text-[#888780] py-10">
+        No tasks in Today — add some from the board first, then come back here to plan.
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <p className="text-[12.5px] text-[#5f5e5a] mb-4">
+        Set brainspace and time for each task, then hit <strong>Launch plan</strong> to run the day.
+      </p>
+
+      {/* Table */}
+      <div className="rounded-xl border border-[#e7e5df] overflow-hidden bg-white mb-4">
+        {/* Column headers */}
+        <div className="grid grid-cols-[1fr_auto_auto] gap-0 border-b border-[#e7e5df] bg-[#f5f3ed]">
+          <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#888780]">Task</div>
+          <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#888780] text-center min-w-[220px]">Brainspace</div>
+          <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#888780] text-center min-w-[72px]">Min</div>
+        </div>
+
+        {todayTasks.map((task, idx) => {
+          const bs  = gp.brainspace[task.id] || null
+          const est = estInputs[task.id] !== undefined ? estInputs[task.id] : (gp.estimates[task.id] || 30)
+          const isLast = idx === todayTasks.length - 1
+
+          return (
+            <div
+              key={task.id}
+              className={`grid grid-cols-[1fr_auto_auto] gap-0 items-center ${!isLast ? 'border-b border-[#f0ede6]' : ''}`}
+            >
+              {/* Task title */}
+              <div className="px-4 py-3">
+                <div className="text-[13.5px] text-[#2c2c2a] font-medium leading-snug truncate">{task.title}</div>
+                {task.notes && (
+                  <div className="text-[11.5px] text-[#aaa9a1] truncate mt-0.5">{task.notes}</div>
+                )}
+              </div>
+
+              {/* Brainspace segmented selector */}
+              <div className="px-4 py-3 flex items-center gap-1 min-w-[220px]">
+                {[
+                  { key: 'deep',    label: 'Deep',   active: 'bg-blue-100 text-blue-700 ring-1 ring-blue-300',    inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
+                  { key: 'medium',  label: 'Medium', active: 'bg-gray-100 text-gray-700 ring-1 ring-gray-300',    inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
+                  { key: 'admin',   label: 'Admin',  active: 'bg-green-100 text-green-700 ring-1 ring-green-300', inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
+                  { key: 'unknown', label: '?',      active: 'bg-amber-100 text-amber-700 ring-1 ring-amber-300', inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
+                ].map(opt => (
+                  <button
+                    key={opt.key}
+                    onClick={() => setBs(task.id, opt.key)}
+                    className={`text-[11.5px] font-medium px-2.5 py-1 rounded-md transition-all ${
+                      bs === opt.key ? opt.active : opt.inactive
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+                {/* Unset hint */}
+                {!bs && (
+                  <span className="text-[11px] text-[#ccc8be] ml-1">← pick one</span>
+                )}
+              </div>
+
+              {/* Time estimate */}
+              <div className="px-4 py-3 min-w-[72px] flex items-center justify-center">
+                <input
+                  type="number"
+                  min="1"
+                  value={est}
+                  onChange={e => setEstInputs(prev => ({ ...prev, [task.id]: e.target.value }))}
+                  onBlur={e => commitEst(task.id, e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                  className="w-14 text-[13px] text-center border border-[#e7e5df] rounded-lg px-2 py-1.5 outline-none focus:border-[#b5d4f4] bg-white text-[#2c2c2a] tabular-nums"
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Summary + launch */}
+      <div className="flex items-center justify-between">
+        <div className="text-[12px] text-[#888780]">
+          {todayTasks.filter(t => gp.brainspace[t.id]).length} of {todayTasks.length} tasks configured
+          {' · '}
+          {todayTasks.reduce((s, t) => s + (gp.estimates[t.id] || 30), 0)} min total
+        </div>
+        <button
+          onClick={onLaunch}
+          className="text-[13px] font-medium px-4 py-2 rounded-lg bg-[#378add] text-white hover:bg-[#2a6fc7] active:scale-[.98] transition-all"
+        >
+          Launch plan →
+        </button>
       </div>
     </div>
   )
