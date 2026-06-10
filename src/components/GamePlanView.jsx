@@ -14,6 +14,22 @@ const BS_SORT = { deep: 0, medium: 1, admin: 2, unknown: 3 }
 const BREAK_DUE_MIN = 90
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+// Translate raw content-calendar slugs to display names in task notes.
+// The content-calendar retained 'beehiiv'/'beehiiv-post' as internal IDs
+// for backward data compatibility, but they should never surface to the user.
+const SLUG_MAP = {
+  'beehiiv-post': 'Substack Post',
+  'beehiiv':      'Substack',
+}
+function humanizeNotes(notes) {
+  if (!notes) return ''
+  return Object.entries(SLUG_MAP).reduce(
+    (s, [slug, label]) => s.replace(new RegExp(slug, 'gi'), label),
+    notes
+  )
+}
+
 function todayKey() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -467,7 +483,7 @@ export default function GamePlanView() {
                     )}
                   </div>
                   {task.notes && (
-                    <div className="text-[11.5px] text-[#888780] mt-0.5 truncate">{task.notes}</div>
+                    <div className="text-[11.5px] text-[#888780] mt-0.5 truncate">{humanizeNotes(task.notes)}</div>
                   )}
                 </div>
 
