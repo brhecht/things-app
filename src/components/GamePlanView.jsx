@@ -739,18 +739,13 @@ export default function GamePlanView() {
         <div>
           {renderPlan.map((item, idx) => {
             if (item.type === 'task') {
-              return <TaskRow key={item.task.id} task={item.task} start={item.start} end={item.end} done={item.done} />
+              return <div key={item.task.id}>{TaskRow({ task: item.task, start: item.start, end: item.end, done: item.done })}</div>
             }
             if (item.type === 'task-split') {
               return (
-                <TaskRow
-                  key={`${item.task.id}-p${item.part}`}
-                  task={item.task}
-                  start={item.start}
-                  end={item.end}
-                  done={item.done}
-                  splitLabel={`(${item.part}/${item.totalParts})`}
-                />
+                <div key={`${item.task.id}-p${item.part}`}>
+                  {TaskRow({ task: item.task, start: item.start, end: item.end, done: item.done, splitLabel: `(${item.part}/${item.totalParts})` })}
+                </div>
               )
             }
             if (item.type === 'calblock') {
