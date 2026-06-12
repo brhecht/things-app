@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, orderBy, query, limit, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import useStore from '../store'
 
 // ── Constants ────────────────────────────────────────────────────
 const BS = {
   deep:    { label: 'Deep',   cls: 'bg-blue-100 text-blue-700',   next: 'medium'  },
-  medium:  { label: 'Medium', cls: 'bg-gray-100 text-gray-600',   next: 'admin'   },
-  admin:   { label: 'Admin',  cls: 'bg-green-100 text-green-700', next: 'unknown' },
+  medium:  { label: 'Medium', cls: 'bg-gray-100 text-gray-600',   next: 'low'     },
+  low:     { label: 'Low',    cls: 'bg-green-100 text-green-700', next: 'unknown' },
   unknown: { label: '?',      cls: 'bg-amber-100 text-amber-700', next: 'deep'    },
 }
-const BS_SORT = { deep: 0, medium: 1, admin: 2, unknown: 3 }
+const BS_SORT = { deep: 0, medium: 1, low: 2, unknown: 3 }
 const BREAK_DUE_MIN = 90
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -63,6 +63,10 @@ export default function GamePlanView() {
   const [editingId, setEditingId] = useState(null)
   const [askMsg, setAskMsg] = useState('')
   const [draggingId, setDraggingId] = useState(null)
+  const [dropTargetId, setDropTargetId] = useState(null)
+  // Inherited values from previous days (computed defaults — not written until user edits or launches)
+  const [inheritedBs, setInheritedBs] = useState({})
+  const [inheritedEst, setInheritedEst] = useState({})
   const [gpTab, setGpTab] = useState('setup') // 'setup' | 'run'
   const dateKey = todayKey()
 
@@ -72,11 +76,39 @@ export default function GamePlanView() {
     return () => clearInterval(t)
   }, [])
 
-  // Load game plan from Firestore on mount
+  // Load game plan from Firestore on mount + scan previous days for carryover defaults
   useEffect(() => {
     if (!dataUid) return
-    getDoc(doc(db, 'users', dataUid, 'gamePlan', dateKey)).then(snap => {
-      setGp(snap.exists() ? { ...DEFAULT_GP(), ...snap.data() } : DEFAULT_GP())
+    getDoc(doc(db, 'users', dataUid, 'gamePlan', dateKey)).then(async snap => {
+      const gpData = snap.exists() ? { ...DEFAULT_GP(), ...snap.data() } : DEFAULT_GP()
+      setGp(gpData)
+
+      // Carryover: find tasks with no saved values and look up past docs
+      const allTodayIds = [] // will be populated after tasks load; scan happens below lazily
+      try {
+        const colRef = collection(db, 'users', dataUid, 'gamePlan')
+        const pastSnap = await getDocs(query(colRef, orderBy('__name__', 'desc'), limit(8)))
+        const pastDocs = pastSnap.docs
+          .filter(d => d.id < dateKey) // only dates strictly before today
+          .slice(0, 7)
+
+        const bsMap = {}
+        const estMap = {}
+        for (const pd of pastDocs) {
+          const d = pd.data()
+          const pBs  = d.brainspace || {}
+          const pEst = d.estimates  || {}
+          const pOrder = d.order || []
+          for (const tid of pOrder) {
+            if (!(tid in bsMap)  && pBs[tid])  bsMap[tid]  = pBs[tid]
+            if (!(tid in estMap) && pEst[tid]) estMap[tid] = pEst[tid]
+          }
+        }
+        setInheritedBs(bsMap)
+        setInheritedEst(estMap)
+      } catch (_) {
+        // Non-critical — carryover is best-effort
+      }
     })
   }, [dataUid, dateKey])
 
@@ -227,6 +259,7 @@ export default function GamePlanView() {
   function onDragEnd() {
     persist({ order: gp.order })
     setDraggingId(null)
+    setDropTargetId(null)
   }
 
   // ── "How am I doing?" ────────────────────────────────────────
@@ -238,7 +271,7 @@ export default function GamePlanView() {
     const total = totalCount
     const pctLocal = total ? Math.round(done / total * 100) : 0
     const deepRemaining = activeTasks.filter(t => !gp.done[t.id] && (gp.brainspace[t.id] || 'medium') === 'deep').length
-    const allAdminRemaining = activeTasks.filter(t => !gp.done[t.id]).every(t => ['admin', 'unknown'].includes(gp.brainspace[t.id] || 'medium'))
+    const allAdminRemaining = activeTasks.filter(t => !gp.done[t.id]).every(t => ['low', 'unknown'].includes(gp.brainspace[t.id] || 'medium'))
     const six = new Date(); six.setHours(18, 0, 0, 0)
 
     if (!currentTask) return "Board's clear — that's a complete day; close the laptop and let it count."
@@ -294,7 +327,20 @@ export default function GamePlanView() {
             tasks={todayTasks}
             gp={gp}
             update={update}
-            onLaunch={() => setGpTab('run')}
+            inheritedBs={inheritedBs}
+            inheritedEst={inheritedEst}
+            onLaunch={() => {
+              // On launch, persist any inherited values that haven't been manually set
+              const bsPatch = {}
+              const estPatch = {}
+              todayTasks.forEach(t => {
+                if (!gp.brainspace[t.id] && inheritedBs[t.id]) bsPatch[t.id] = inheritedBs[t.id]
+                if (!gp.estimates[t.id]  && inheritedEst[t.id]) estPatch[t.id] = inheritedEst[t.id]
+              })
+              if (Object.keys(bsPatch).length)  update({ brainspace: { ...gp.brainspace, ...bsPatch } })
+              if (Object.keys(estPatch).length)  update({ estimates:  { ...gp.estimates,  ...estPatch } })
+              setGpTab('run')
+            }}
           />
         )}
 
@@ -439,8 +485,10 @@ export default function GamePlanView() {
                 draggable
                 onDragStart={e => onDragStart(e, task.id)}
                 onDragOver={e => onDragOver(e, task.id)}
+                onDragEnter={() => draggingId && draggingId !== task.id && setDropTargetId(task.id)}
+                onDragLeave={() => setDropTargetId(null)}
                 onDragEnd={onDragEnd}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
+                className={`relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
                   isDragging ? 'opacity-40 border-[#378add]' :
                   isDone     ? 'bg-[#f4f2ec] border-transparent' :
                   isNow      ? 'bg-[#fbfcfe] border-l-[3px] border-l-[#378add] border-[#e7e5df]' :
@@ -448,6 +496,9 @@ export default function GamePlanView() {
                   'bg-white border-[#e7e5df]'
                 }`}
               >
+                {dropTargetId === task.id && (
+                  <div className="absolute -top-[3px] left-0 right-0 h-[3px] rounded-full bg-[#378add] pointer-events-none z-10" />
+                )}
                 {/* Grip */}
                 <div className="cursor-grab flex-none text-[#bdbbb2] text-lg leading-none">⠿</div>
 
@@ -541,7 +592,7 @@ export default function GamePlanView() {
 // ── SetupTable ────────────────────────────────────────────────────
 // Morning setup: configure brainspace + time for every task in one grid.
 // `tasks` is already filtered to today's non-completed tasks.
-function SetupTable({ tasks: todayTasks, gp, update, onLaunch }) {
+function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inheritedEst = {}, onLaunch }) {
   // Local estimate edits tracked by taskId
   const [estInputs, setEstInputs] = useState({})
 
@@ -583,8 +634,10 @@ function SetupTable({ tasks: todayTasks, gp, update, onLaunch }) {
         </div>
 
         {todayTasks.map((task, idx) => {
-          const bs  = gp.brainspace[task.id] || null
-          const est = estInputs[task.id] !== undefined ? estInputs[task.id] : (gp.estimates[task.id] || 30)
+          const bs  = gp.brainspace[task.id] || inheritedBs[task.id] || null
+          const isInheritedBs = !gp.brainspace[task.id] && !!inheritedBs[task.id]
+          const est = estInputs[task.id] !== undefined ? estInputs[task.id] : (gp.estimates[task.id] || inheritedEst[task.id] || 30)
+          const isInheritedEst = !gp.estimates[task.id] && !!inheritedEst[task.id] && estInputs[task.id] === undefined
           const isLast = idx === todayTasks.length - 1
 
           return (
@@ -601,11 +654,11 @@ function SetupTable({ tasks: todayTasks, gp, update, onLaunch }) {
               </div>
 
               {/* Brainspace segmented selector */}
-              <div className="px-4 py-3 flex items-center gap-1 min-w-[220px]">
+              <div className="px-4 py-3 flex items-center gap-1 min-w-[220px]" title={isInheritedBs ? 'Carried over from a previous day' : undefined}>
                 {[
                   { key: 'deep',    label: 'Deep',   active: 'bg-blue-100 text-blue-700 ring-1 ring-blue-300',    inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
                   { key: 'medium',  label: 'Medium', active: 'bg-gray-100 text-gray-700 ring-1 ring-gray-300',    inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
-                  { key: 'admin',   label: 'Admin',  active: 'bg-green-100 text-green-700 ring-1 ring-green-300', inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
+                  { key: 'low',     label: 'Low',    active: 'bg-green-100 text-green-700 ring-1 ring-green-300', inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
                   { key: 'unknown', label: '?',      active: 'bg-amber-100 text-amber-700 ring-1 ring-amber-300', inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
                 ].map(opt => (
                   <button
@@ -618,9 +671,12 @@ function SetupTable({ tasks: todayTasks, gp, update, onLaunch }) {
                     {opt.label}
                   </button>
                 ))}
-                {/* Unset hint */}
+                {/* Unset hint / inherited indicator */}
                 {!bs && (
                   <span className="text-[11px] text-[#ccc8be] ml-1">← pick one</span>
+                )}
+                {isInheritedBs && (
+                  <span className="text-[10px] text-[#aaa9a1] ml-1" title="Carried over from a previous day">↩</span>
                 )}
               </div>
 
@@ -633,7 +689,7 @@ function SetupTable({ tasks: todayTasks, gp, update, onLaunch }) {
                   onChange={e => setEstInputs(prev => ({ ...prev, [task.id]: e.target.value }))}
                   onBlur={e => commitEst(task.id, e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                  className="w-14 text-[13px] text-center border border-[#e7e5df] rounded-lg px-2 py-1.5 outline-none focus:border-[#b5d4f4] bg-white text-[#2c2c2a] tabular-nums"
+                  className={`w-14 text-[13px] text-center border rounded-lg px-2 py-1.5 outline-none focus:border-[#b5d4f4] bg-white text-[#2c2c2a] tabular-nums ${isInheritedEst ? 'border-dashed border-[#c7c5bc]' : 'border-[#e7e5df]'}`}
                 />
               </div>
             </div>
