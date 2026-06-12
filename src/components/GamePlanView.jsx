@@ -181,9 +181,7 @@ export default function GamePlanView() {
   const [inheritedBs, setInheritedBs] = useState({})
   const [inheritedEst,setInheritedEst]= useState({})
   const [selectedTask, setSelectedTask] = useState(null)
-  const [dragDisplayOrder, setDragDisplayOrder] = useState(null)
   const wasDraggingRef = useRef(false)
-  const dragOrderRef = useRef(null)
   const dateKey = todayKey()
 
   // 1-second ticker
@@ -275,7 +273,7 @@ export default function GamePlanView() {
   const suppressed   = gp.suppressed || []
   const todayTasks   = tasks.filter(t => t.bucket === 'today' && !t.completed && !suppressed.includes(t.id))
   const parkedTasks  = tasks.filter(t => t.bucket === 'today' && !t.completed && suppressed.includes(t.id))
-  const savedOrder   = dragDisplayOrder || gp.order || []
+  const savedOrder   = gp.order || []
   const orderedTasks = [
     ...savedOrder.map(id => todayTasks.find(t => t.id === id)).filter(Boolean),
     ...todayTasks.filter(t => !savedOrder.includes(t.id)),
@@ -382,29 +380,22 @@ export default function GamePlanView() {
   function onDragStart(e, id) {
     wasDraggingRef.current = true
     setDraggingId(id)
-    const initialOrder = planTasks.map(t => t.id)
-    dragOrderRef.current = initialOrder
-    setDragDisplayOrder(initialOrder) // drives visual order; never touches gp
     e.dataTransfer.effectAllowed = 'move'
   }
 
   function onDragOver(e, targetId) {
     e.preventDefault()
-    if (!dragOrderRef.current || !draggingId || draggingId === targetId) return
-    const base = [...dragOrderRef.current]
+    if (!draggingId || draggingId === targetId) return
+    const base = planTasks.map(t => t.id)
     const from = base.indexOf(draggingId), to = base.indexOf(targetId)
     if (from === -1 || to === -1) return
     base.splice(from, 1); base.splice(to, 0, draggingId)
-    dragOrderRef.current = base
-    setDragDisplayOrder([...base]) // visual reorder; gp untouched until dragEnd
+    setGp(prev => ({ ...prev, order: base }))
     setDropTargetId(targetId)
   }
 
   function onDragEnd() {
-    const finalOrder = dragOrderRef.current
-    dragOrderRef.current = null
-    setDragDisplayOrder(null) // release visual override; planTasks reverts to gp.order
-    if (finalOrder) update({ order: finalOrder }) // single gp + Firestore write
+    persist({ order: gp.order })
     setDraggingId(null)
     setDropTargetId(null)
     setTimeout(() => { wasDraggingRef.current = false }, 0)
@@ -441,6 +432,7 @@ export default function GamePlanView() {
         draggable
         onDragStart={e => onDragStart(e, task.id)}
         onDragOver={e => onDragOver(e, task.id)}
+        onDragEnter={() => draggingId && draggingId !== task.id && setDropTargetId(task.id)}
         onDragEnd={onDragEnd}
         className={`group relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
           isDragging ? 'opacity-40 border-[#378add]' :
@@ -472,7 +464,7 @@ export default function GamePlanView() {
           {isDone ? 'done' : (start && end) ? `${fmt(start)}–${fmt(end)}` : ''}
         </div>
         {/* Title */}
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setSelectedTask(task)}>
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { if (!wasDraggingRef.current) setSelectedTask(task) }}>
           <div className={`text-[14px] flex items-center gap-1.5 flex-wrap ${isDone ? 'line-through text-[#888780]' : 'text-[#2c2c2a]'}`}>
             <span className="truncate">{task.title}</span>
             {splitLabel && <span className="text-[10px] text-[#aaa9a1] flex-none">{splitLabel}</span>}

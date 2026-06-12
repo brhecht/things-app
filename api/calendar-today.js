@@ -76,14 +76,6 @@ export default async function handler(req, res) {
     }
 
     // 4. Filter and normalise
-    // Debug: log raw event statuses to help diagnose filtered-but-visible events
-    console.log('[cal-debug] raw events:', JSON.stringify(calData.items.map(e => ({
-      summary: e.summary,
-      status: e.status,
-      start: e.start?.dateTime || e.start?.date,
-      selfResponse: e.attendees?.find(a => a.self)?.responseStatus,
-      organizer: e.organizer?.self,
-    }))))
     const events = calData.items
       .filter(e => {
         // Skip cancelled events
