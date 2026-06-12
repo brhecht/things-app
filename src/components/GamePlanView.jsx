@@ -377,28 +377,32 @@ export default function GamePlanView() {
   }
 
   // ── Drag handlers ────────────────────────────────────────────
+  // dragOrderRef tracks the live reordering during a drag — synchronous, no stale closures
+  const dragOrderRef = useRef(null)
+
   function onDragStart(e, id) {
     wasDraggingRef.current = true
     setDraggingId(id)
+    dragOrderRef.current = planTasks.map(t => t.id) // snapshot current order
     e.dataTransfer.effectAllowed = 'move'
   }
 
   function onDragOver(e, targetId) {
     e.preventDefault()
-    if (!draggingId || draggingId === targetId) return
-    const base = planTasks.map(t => t.id)
+    if (!dragOrderRef.current || !draggingId || draggingId === targetId) return
+    const base = [...dragOrderRef.current] // always read from ref, never stale
     const from = base.indexOf(draggingId), to = base.indexOf(targetId)
     if (from === -1 || to === -1) return
     base.splice(from, 1); base.splice(to, 0, draggingId)
-    setGp(prev => ({ ...prev, order: base }))
+    dragOrderRef.current = base
+    setGp(prev => ({ ...prev, order: base })) // visual reorder only
+    setDropTargetId(targetId) // set here instead of onDragEnter to avoid child-element flicker
   }
 
   function onDragEnd() {
-    // Use functional setGp to read the CURRENT order (not stale closure)
-    setGp(prev => {
-      persist({ order: prev.order })
-      return prev
-    })
+    const finalOrder = dragOrderRef.current
+    dragOrderRef.current = null
+    if (finalOrder) persist({ order: finalOrder }) // one clean persist from ref
     setDraggingId(null)
     setDropTargetId(null)
     setTimeout(() => { wasDraggingRef.current = false }, 0)
@@ -435,8 +439,6 @@ export default function GamePlanView() {
         draggable
         onDragStart={e => onDragStart(e, task.id)}
         onDragOver={e => onDragOver(e, task.id)}
-        onDragEnter={() => draggingId && draggingId !== task.id && setDropTargetId(task.id)}
-        onDragLeave={() => setDropTargetId(null)}
         onDragEnd={onDragEnd}
         className={`group relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
           isDragging ? 'opacity-40 border-[#378add]' :
