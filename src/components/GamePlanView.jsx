@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, Component } from 'react'
 import { collection, doc, getDoc, getDocs, orderBy, query, limit, setDoc } from 'firebase/firestore'
 import { db, auth } from '../firebase'
 import useStore from '../store'
+import TaskModal from './TaskModal'
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -178,6 +179,7 @@ export default function GamePlanView() {
   const [calError,    setCalError]    = useState(null)
   const [inheritedBs, setInheritedBs] = useState({})
   const [inheritedEst,setInheritedEst]= useState({})
+  const [selectedTask, setSelectedTask] = useState(null)
   const dateKey = todayKey()
 
   // 1-second ticker
@@ -419,7 +421,8 @@ export default function GamePlanView() {
         onDragEnter={() => draggingId && draggingId !== task.id && setDropTargetId(task.id)}
         onDragLeave={() => setDropTargetId(null)}
         onDragEnd={onDragEnd}
-        className={`relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
+        onClick={() => setSelectedTask(task)}
+        className={`cursor-pointer relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
           isDragging ? 'opacity-40 border-[#378add]' :
           isDone     ? 'bg-[#f4f2ec] border-transparent' :
           isNow      ? 'bg-[#fbfcfe] border-l-[3px] border-l-[#378add] border-[#e7e5df]' :
@@ -573,6 +576,7 @@ export default function GamePlanView() {
             inheritedBs={inheritedBs}
             inheritedEst={inheritedEst}
             calEvents={calEvents}
+            onTaskClick={setSelectedTask}
             onLaunch={() => {
               // Persist inherited values that haven't been manually set
               const bsPatch = {}, estPatch = {}
@@ -754,13 +758,14 @@ export default function GamePlanView() {
 
         </ErrorBoundary>}
 
+      {selectedTask && <TaskModal task={selectedTask} onClose={() => setSelectedTask(null)} />}
       </div>
     </div>
   )
 }
 
 // ── SetupTable ────────────────────────────────────────────────────
-function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inheritedEst = {}, calEvents = [], onLaunch }) {
+function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inheritedEst = {}, calEvents = [], onLaunch, onTaskClick }) {
   const [estInputs, setEstInputs] = useState({})
 
   function setBs(taskId, bs) {
@@ -829,7 +834,7 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
 
           return (
             <div key={task.id} className={`grid grid-cols-[1fr_auto_auto] gap-0 items-center ${!isLast ? 'border-b border-[#f0ede6]' : ''}`}>
-              <div className="px-4 py-3">
+              <div className="px-4 py-3 cursor-pointer" onClick={() => onTaskClick && onTaskClick(task)}>
                 <div className="text-[13.5px] text-[#2c2c2a] font-medium leading-snug truncate">{task.title}</div>
                 {task.notes && <div className="text-[11.5px] text-[#aaa9a1] truncate mt-0.5">{task.notes}</div>}
               </div>
