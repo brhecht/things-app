@@ -56,14 +56,16 @@ export default async function handler(req, res) {
     const timeMax = new Date(y, m, d, 23, 59, 59).toISOString()
 
     // 3. Fetch events from primary calendar
+    // showDeleted:true is required to surface status:'cancelled' events (e.g. cancelled meetings)
     const calRes = await fetch(
       'https://www.googleapis.com/calendar/v3/calendars/primary/events?' +
       new URLSearchParams({
         timeMin,
         timeMax,
-        singleEvents: 'true',
-        orderBy:      'startTime',
-        maxResults:   '50',
+        singleEvents:  'true',
+        orderBy:       'startTime',
+        maxResults:    '50',
+        showDeleted:   'true',
       }),
       { headers: { Authorization: `Bearer ${tokenData.access_token}` } }
     )
@@ -74,6 +76,14 @@ export default async function handler(req, res) {
     }
 
     // 4. Filter and normalise
+    // Debug: log raw event statuses to help diagnose filtered-but-visible events
+    console.log('[cal-debug] raw events:', JSON.stringify(calData.items.map(e => ({
+      summary: e.summary,
+      status: e.status,
+      start: e.start?.dateTime || e.start?.date,
+      selfResponse: e.attendees?.find(a => a.self)?.responseStatus,
+      organizer: e.organizer?.self,
+    }))))
     const events = calData.items
       .filter(e => {
         // Skip cancelled events

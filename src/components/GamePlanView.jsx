@@ -394,7 +394,11 @@ export default function GamePlanView() {
   }
 
   function onDragEnd() {
-    persist({ order: gp.order })
+    // Use functional setGp to read the CURRENT order (not stale closure)
+    setGp(prev => {
+      persist({ order: prev.order })
+      return prev
+    })
     setDraggingId(null)
     setDropTargetId(null)
     setTimeout(() => { wasDraggingRef.current = false }, 0)
