@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Component } from 'react'
+import { useState, useEffect, useCallback, useRef, Component } from 'react'
 import { collection, doc, getDoc, getDocs, orderBy, query, limit, setDoc } from 'firebase/firestore'
 import { db, auth } from '../firebase'
 import useStore from '../store'
@@ -180,6 +180,7 @@ export default function GamePlanView() {
   const [inheritedBs, setInheritedBs] = useState({})
   const [inheritedEst,setInheritedEst]= useState({})
   const [selectedTask, setSelectedTask] = useState(null)
+  const wasDraggingRef = useRef(false)
   const dateKey = todayKey()
 
   // 1-second ticker
@@ -367,6 +368,7 @@ export default function GamePlanView() {
 
   // ── Drag handlers ────────────────────────────────────────────
   function onDragStart(e, id) {
+    wasDraggingRef.current = true
     setDraggingId(id)
     e.dataTransfer.effectAllowed = 'move'
   }
@@ -385,6 +387,7 @@ export default function GamePlanView() {
     persist({ order: gp.order })
     setDraggingId(null)
     setDropTargetId(null)
+    setTimeout(() => { wasDraggingRef.current = false }, 0)
   }
 
   // ── "How am I doing?" ────────────────────────────────────────
@@ -421,7 +424,7 @@ export default function GamePlanView() {
         onDragEnter={() => draggingId && draggingId !== task.id && setDropTargetId(task.id)}
         onDragLeave={() => setDropTargetId(null)}
         onDragEnd={onDragEnd}
-        onClick={() => setSelectedTask(task)}
+        onClick={() => { if (!wasDraggingRef.current) setSelectedTask(task) }}
         className={`cursor-pointer relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
           isDragging ? 'opacity-40 border-[#378add]' :
           isDone     ? 'bg-[#f4f2ec] border-transparent' :
