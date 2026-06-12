@@ -88,6 +88,9 @@ const SEED_TASKS = [
   { id: 't8', title: 'Plan dinner with Sarah',       projectId: 'friends',          bucket: 'soon',     priority: null,     notes: '', tags: [], starred: false, completed: false, createdAt: Date.now() },
 ]
 
+// ── Morning merge: session guard (runs once per day on first task load) ──────
+let _morningMergeDone = false
+
 const useStore = create((set, get) => ({
   // ── Auth state ────────────────────────────────────────────────
   user: null,
@@ -283,6 +286,18 @@ const useStore = create((set, get) => ({
       const visibleTasks = isViewer
         ? tasks.filter((t) => !t.projectId || visibleProjectIds.has(t.projectId))
         : tasks
+      // ── Morning merge: tomorrow → today on first daily launch ──────────────
+      if (!_morningMergeDone && !get().isViewer) {
+        _morningMergeDone = true
+        const todayKey = new Date().toISOString().slice(0, 10)
+        const lastMerge = typeof localStorage !== 'undefined' && localStorage.getItem('lastMorningMerge')
+        if (lastMerge !== todayKey) {
+          const toMove = tasks.filter(t => t.bucket === 'tomorrow' && !t.completed)
+          toMove.forEach(t => upsertTask(userId, { ...t, bucket: 'today' }))
+          if (typeof localStorage !== 'undefined') localStorage.setItem('lastMorningMerge', todayKey)
+        }
+      }
+
       set({ _rawTasks: tasks, tasks: visibleTasks })
     })
 
