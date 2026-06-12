@@ -404,7 +404,8 @@ export default function GamePlanView() {
 
   // ── Render helpers ───────────────────────────────────────────
   function TaskRow({ task, start, end, done: isDone, splitLabel }) {
-    const bs         = gp.brainspace[task.id] || 'medium'
+    const rawBs = gp.brainspace[task.id] || 'medium'
+    const bs = BS[rawBs] ? rawBs : 'medium'
     const bsCfg      = BS[bs]
     const isNow      = !isDone && !gp.onBreak && currentTask?.id === task.id
     const est        = gp.estimates[task.id] || 30
