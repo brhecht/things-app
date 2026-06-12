@@ -436,7 +436,7 @@ export default function GamePlanView() {
         <div className="cursor-grab flex-none text-[#bdbbb2] text-lg leading-none">⠿</div>
         {/* Done circle */}
         <button
-          onClick={() => !isDone && markDone(task.id)}
+          onClick={e => { e.stopPropagation(); !isDone && markDone(task.id) }}
           className={`flex-none w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center ${
             isDone ? 'bg-[#1d9e75] border-[#1d9e75]' : 'border-[#c7c5bc] hover:border-[#1d9e75]'
           }`}
@@ -477,7 +477,7 @@ export default function GamePlanView() {
             />
           ) : (
             <button
-              onClick={() => !isDone && setEditingId(task.id)}
+              onClick={e => { e.stopPropagation(); !isDone && setEditingId(task.id) }}
               className={`text-[11px] tabular-nums ${isDone ? 'text-[#aaa9a1]' : 'text-[#888780] hover:text-[#185fa5]'}`}
             >
               {est}m
@@ -486,7 +486,7 @@ export default function GamePlanView() {
         </div>
         {/* Brainspace badge */}
         <button
-          onClick={() => !isDone && cycleBrainspace(task.id)}
+          onClick={e => { e.stopPropagation(); !isDone && cycleBrainspace(task.id) }}
           className={`flex-none text-[10.5px] font-medium px-2 py-0.5 rounded-full transition-opacity ${bsCfg.cls} ${isDone ? 'opacity-40 cursor-default' : 'hover:opacity-80'}`}
         >
           {bsCfg.label}
