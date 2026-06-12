@@ -391,7 +391,6 @@ export default function GamePlanView() {
     if (from === -1 || to === -1) return
     base.splice(from, 1); base.splice(to, 0, draggingId)
     setGp(prev => ({ ...prev, order: base }))
-    setDropTargetId(targetId)
   }
 
   function onDragEnd() {
@@ -433,8 +432,10 @@ export default function GamePlanView() {
         onDragStart={e => onDragStart(e, task.id)}
         onDragOver={e => onDragOver(e, task.id)}
         onDragEnter={() => draggingId && draggingId !== task.id && setDropTargetId(task.id)}
+        onDragLeave={() => setDropTargetId(null)}
         onDragEnd={onDragEnd}
-        className={`group relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
+        onClick={() => { if (!wasDraggingRef.current) setSelectedTask(task) }}
+        className={`group cursor-pointer relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
           isDragging ? 'opacity-40 border-[#378add]' :
           isDone     ? 'bg-[#f4f2ec] border-transparent' :
           isNow      ? 'bg-[#fbfcfe] border-l-[3px] border-l-[#378add] border-[#e7e5df]' :
@@ -464,7 +465,7 @@ export default function GamePlanView() {
           {isDone ? 'done' : (start && end) ? `${fmt(start)}–${fmt(end)}` : ''}
         </div>
         {/* Title */}
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { if (!wasDraggingRef.current) setSelectedTask(task) }}>
+        <div className="flex-1 min-w-0">
           <div className={`text-[14px] flex items-center gap-1.5 flex-wrap ${isDone ? 'line-through text-[#888780]' : 'text-[#2c2c2a]'}`}>
             <span className="truncate">{task.title}</span>
             {splitLabel && <span className="text-[10px] text-[#aaa9a1] flex-none">{splitLabel}</span>}
