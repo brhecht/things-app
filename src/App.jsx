@@ -17,7 +17,8 @@ import AppSwitcher from './AppSwitcher'
 export default function App() {
   const { user, authLoading, isViewer, initAuth, undo, _undoToast, _undoStack, setSelectedProject, selectedProjectId, tasks } = useStore()
   const [filters, setFilters] = useState({ starred: false, priorities: [] })
-  const [view, setView] = useState('kanban') // 'kanban' | 'agenda' | 'completed' | 'gameplan'
+  const [view, setView] = useState(() => localStorage.getItem('btLastView') || 'kanban') // 'kanban' | 'agenda' | 'completed' | 'gameplan'
+  const setViewPersist = (v) => { localStorage.setItem('btLastView', v); setView(v) }
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const isMobile = useIsMobile()
 
@@ -41,7 +42,7 @@ export default function App() {
     const params = new URLSearchParams(window.location.search)
     const viewParam = params.get('view')
     if (viewParam && ['kanban', 'agenda', 'completed', 'gameplan'].includes(viewParam)) {
-      setView(viewParam)
+      setViewPersist(viewParam)
       window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
@@ -196,7 +197,7 @@ export default function App() {
         {/* View toggle */}
         <div className="flex items-center gap-1 px-8 pt-4 bg-gray-50">
           <button
-            onClick={() => setView('kanban')}
+            onClick={() => setViewPersist('kanban')}
             className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
               view === 'kanban' ? 'bg-white text-gray-800 shadow-sm border border-gray-200' : 'text-gray-400 hover:text-gray-600'
             }`}
@@ -204,7 +205,7 @@ export default function App() {
             Board
           </button>
           <button
-            onClick={() => setView('agenda')}
+            onClick={() => setViewPersist('agenda')}
             className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
               view === 'agenda' ? 'bg-white text-gray-800 shadow-sm border border-gray-200' : 'text-gray-400 hover:text-gray-600'
             }`}
@@ -212,7 +213,7 @@ export default function App() {
             Agenda
           </button>
           <button
-            onClick={() => setView('completed')}
+            onClick={() => setViewPersist('completed')}
             className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
               view === 'completed' ? 'bg-white text-gray-800 shadow-sm border border-gray-200' : 'text-gray-400 hover:text-gray-600'
             }`}
@@ -220,7 +221,7 @@ export default function App() {
             Completed
           </button>
           <button
-            onClick={() => setView('gameplan')}
+            onClick={() => setViewPersist('gameplan')}
             className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
               view === 'gameplan' ? 'bg-white text-gray-800 shadow-sm border border-gray-200' : 'text-gray-400 hover:text-gray-600'
             }`}

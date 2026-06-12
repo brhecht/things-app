@@ -173,7 +173,8 @@ export default function GamePlanView() {
   const [askMsg,      setAskMsg]      = useState('')
   const [draggingId,  setDraggingId]  = useState(null)
   const [dropTargetId,setDropTargetId]= useState(null)
-  const [gpTab,       setGpTab]       = useState('setup')
+  const [gpTab,       setGpTab]       = useState(() => localStorage.getItem('btGpTab') || 'setup')
+  const setGpTabPersist = (t) => { localStorage.setItem('btGpTab', t); setGpTab(t) }
   const [calEvents,   setCalEvents]   = useState([])
   const [calLoading,  setCalLoading]  = useState(false)
   const [calError,    setCalError]    = useState(null)
@@ -578,7 +579,7 @@ export default function GamePlanView() {
           {['setup', 'run'].map(tab => (
             <button
               key={tab}
-              onClick={() => setGpTab(tab)}
+              onClick={() => setGpTabPersist(tab)}
               className={`text-[12.5px] font-medium px-4 py-1.5 rounded-md capitalize transition-colors ${
                 gpTab === tab ? 'bg-white text-[#2c2c2a] shadow-sm' : 'text-[#888780] hover:text-[#5f5e5a]'
               }`}
@@ -611,7 +612,7 @@ export default function GamePlanView() {
               if (Object.keys(bsPatch).length)  update({ brainspace: { ...gp.brainspace, ...bsPatch } })
               if (Object.keys(estPatch).length)  update({ estimates:  { ...gp.estimates,  ...estPatch } })
               update({ planStart: Date.now() })
-              setGpTab('run')
+              setGpTabPersist('run')
             }}
           />
         )}
