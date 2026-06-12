@@ -181,7 +181,9 @@ export default function GamePlanView() {
   const [inheritedBs, setInheritedBs] = useState({})
   const [inheritedEst,setInheritedEst]= useState({})
   const [selectedTask, setSelectedTask] = useState(null)
+  const [dragDisplayOrder, setDragDisplayOrder] = useState(null)
   const wasDraggingRef = useRef(false)
+  const dragOrderRef = useRef(null)
   const dateKey = todayKey()
 
   // 1-second ticker
@@ -273,7 +275,7 @@ export default function GamePlanView() {
   const suppressed   = gp.suppressed || []
   const todayTasks   = tasks.filter(t => t.bucket === 'today' && !t.completed && !suppressed.includes(t.id))
   const parkedTasks  = tasks.filter(t => t.bucket === 'today' && !t.completed && suppressed.includes(t.id))
-  const savedOrder   = gp.order || []
+  const savedOrder   = dragDisplayOrder || gp.order || []
   const orderedTasks = [
     ...savedOrder.map(id => todayTasks.find(t => t.id === id)).filter(Boolean),
     ...todayTasks.filter(t => !savedOrder.includes(t.id)),
@@ -377,32 +379,32 @@ export default function GamePlanView() {
   }
 
   // ── Drag handlers ────────────────────────────────────────────
-  // dragOrderRef tracks the live reordering during a drag — synchronous, no stale closures
-  const dragOrderRef = useRef(null)
-
   function onDragStart(e, id) {
     wasDraggingRef.current = true
     setDraggingId(id)
-    dragOrderRef.current = planTasks.map(t => t.id) // snapshot current order
+    const initialOrder = planTasks.map(t => t.id)
+    dragOrderRef.current = initialOrder
+    setDragDisplayOrder(initialOrder) // drives visual order; never touches gp
     e.dataTransfer.effectAllowed = 'move'
   }
 
   function onDragOver(e, targetId) {
     e.preventDefault()
     if (!dragOrderRef.current || !draggingId || draggingId === targetId) return
-    const base = [...dragOrderRef.current] // always read from ref, never stale
+    const base = [...dragOrderRef.current]
     const from = base.indexOf(draggingId), to = base.indexOf(targetId)
     if (from === -1 || to === -1) return
     base.splice(from, 1); base.splice(to, 0, draggingId)
     dragOrderRef.current = base
-    setGp(prev => ({ ...prev, order: base })) // visual reorder only
-    setDropTargetId(targetId) // set here instead of onDragEnter to avoid child-element flicker
+    setDragDisplayOrder([...base]) // visual reorder; gp untouched until dragEnd
+    setDropTargetId(targetId)
   }
 
   function onDragEnd() {
     const finalOrder = dragOrderRef.current
     dragOrderRef.current = null
-    if (finalOrder) persist({ order: finalOrder }) // one clean persist from ref
+    setDragDisplayOrder(null) // release visual override; planTasks reverts to gp.order
+    if (finalOrder) update({ order: finalOrder }) // single gp + Firestore write
     setDraggingId(null)
     setDropTargetId(null)
     setTimeout(() => { wasDraggingRef.current = false }, 0)
