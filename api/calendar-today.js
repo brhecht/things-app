@@ -76,6 +76,8 @@ export default async function handler(req, res) {
     // 4. Filter and normalise
     const events = calData.items
       .filter(e => {
+        // Skip cancelled events
+        if (e.status === 'cancelled') return false
         // Skip all-day events (have `date` not `dateTime`)
         if (!e.start?.dateTime) return false
         // Skip unoccupied appointment slots: events where Brian is the only attendee
