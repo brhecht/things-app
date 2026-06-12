@@ -1,7 +1,22 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Component } from 'react'
 import { collection, doc, getDoc, getDocs, orderBy, query, limit, setDoc } from 'firebase/firestore'
 import { db, auth } from '../firebase'
 import useStore from '../store'
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null } }
+  static getDerivedStateFromError(e) { return { error: e } }
+  componentDidCatch(e, info) { console.error('GamePlan render error:', e, info) }
+  render() {
+    if (this.state.error) return (
+      <div className="p-4 text-red-600 text-sm bg-red-50 rounded-lg">
+        <strong>Render error:</strong> {this.state.error.message}
+        <button className="ml-3 underline" onClick={() => this.setState({ error: null })}>retry</button>
+      </div>
+    )
+    return this.props.children
+  }
+}
 
 // ── Constants ────────────────────────────────────────────────────
 const BS = {
@@ -263,7 +278,12 @@ export default function GamePlanView() {
 
   // ── Build render plan ────────────────────────────────────────
   const planCursor  = gp.planStart || now
-  const renderPlan  = buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, planCursor)
+  let renderPlan = []
+  try {
+    renderPlan = buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, planCursor)
+  } catch (e) {
+    console.error('buildRenderPlan threw:', e)
+  }
 
   // Current active task (first non-done task item)
   const currentTaskItem = renderPlan.find(
@@ -568,7 +588,7 @@ export default function GamePlanView() {
         )}
 
         {/* ── RUN TAB ───────────────────────────────────────────── */}
-        {gpTab === 'run' && <>
+        {gpTab === 'run' && <ErrorBoundary>
 
         {/* How am I doing */}
         <div className="mb-3">
@@ -731,7 +751,7 @@ export default function GamePlanView() {
           </div>
         )}
 
-        </> /* end run tab */}
+        </ErrorBoundary>}
 
       </div>
     </div>
