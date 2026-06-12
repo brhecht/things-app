@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { collection, doc, getDoc, getDocs, orderBy, query, limit, setDoc } from 'firebase/firestore'
-import { db } from '../firebase'
+import { db, auth } from '../firebase'
 import useStore from '../store'
 
 // ── Constants ────────────────────────────────────────────────────
@@ -10,24 +10,15 @@ const BS = {
   low:     { label: 'Low',    cls: 'bg-green-100 text-green-700', next: 'unknown' },
   unknown: { label: '?',      cls: 'bg-amber-100 text-amber-700', next: 'deep'    },
 }
-const BS_SORT = { deep: 0, medium: 1, low: 2, unknown: 3 }
+const BS_SORT       = { deep: 0, medium: 1, low: 2, unknown: 3 }
 const BREAK_DUE_MIN = 90
 
 // ── Helpers ──────────────────────────────────────────────────────
-
-// Translate raw content-calendar slugs to display names in task notes.
-// The content-calendar retained 'beehiiv'/'beehiiv-post' as internal IDs
-// for backward data compatibility, but they should never surface to the user.
-const SLUG_MAP = {
-  'beehiiv-post': 'Substack Post',
-  'beehiiv':      'Substack',
-}
+const SLUG_MAP = { 'beehiiv-post': 'Substack Post', 'beehiiv': 'Substack' }
 function humanizeNotes(notes) {
   if (!notes) return ''
   return Object.entries(SLUG_MAP).reduce(
-    (s, [slug, label]) => s.replace(new RegExp(slug, 'gi'), label),
-    notes
-  )
+    (s, [slug, label]) => s.replace(new RegExp(slug, 'gi'), label), notes)
 }
 
 function todayKey() {
@@ -43,31 +34,135 @@ function fmt(ms) {
   return `${h}:${m < 10 ? '0' : ''}${m}${ap}`
 }
 
+function fmtDur(ms) {
+  const m = Math.round(ms / 60000)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60), rem = m % 60
+  return rem ? `${h}h ${rem}m` : `${h}h`
+}
+
 const DEFAULT_GP = () => ({
-  order: [],
-  done: {},
-  estimates: {},
-  brainspace: {},
-  focusId: null,
-  focusStart: null,
-  onBreak: false,
-  breakStart: null,
-  lastBreak: Date.now(),
+  order: [], done: {}, estimates: {}, brainspace: {},
+  focusId: null, focusStart: null, planStart: null,
+  onBreak: false, breakStart: null, lastBreak: Date.now(),
 })
+
+// ── Schedule builder ─────────────────────────────────────────────
+// Returns an ordered array of render items:
+//   { type: 'task',     task, start, end, done }
+//   { type: 'task-split', task, part, totalParts, start, end, partMs, estMs, done }
+//   { type: 'calblock', event, start, end, ongoing }
+//   { type: 'unknown',  task }
+function buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, cursorMs) {
+  const sortedCal = [...calEvents].sort((a, b) => a.startMs - b.startMs)
+  const items = []
+  let cursor  = cursorMs
+  let calIdx  = 0
+
+  // Insert cal events that have already started (or just started) before cursor
+  function drainPastCal() {
+    while (calIdx < sortedCal.length) {
+      const cal = sortedCal[calIdx]
+      if (cal.startMs > cursor) break
+      calIdx++
+      if (cal.endMs > cursor) {
+        items.push({ type: 'calblock', event: cal, start: cal.startMs, end: cal.endMs, ongoing: true })
+        cursor = cal.endMs
+      }
+    }
+  }
+
+  drainPastCal()
+
+  for (const task of activeTasks) {
+    if (gp.done[task.id]) {
+      items.push({ type: 'task', task, start: null, end: null, done: true })
+      continue
+    }
+
+    const estMs    = (gp.estimates[task.id] || 30) * 60000
+    let remaining  = estMs
+    let partStart  = cursor
+    const splits   = [] // collect split segments first, then annotate with totalParts
+
+    while (remaining > 0) {
+      const nextCal = calIdx < sortedCal.length ? sortedCal[calIdx] : null
+
+      if (nextCal && nextCal.startMs < cursor + remaining) {
+        if (nextCal.startMs <= cursor) {
+          // Cal block starts at or before current cursor — insert it, advance cursor
+          items.push({ type: 'calblock', event: nextCal, start: nextCal.startMs, end: nextCal.endMs, ongoing: false })
+          cursor = Math.max(cursor, nextCal.endMs)
+          calIdx++
+          drainPastCal()
+        } else {
+          // Cal block interrupts this task — create a split segment
+          const part1Ms = nextCal.startMs - cursor
+          splits.push({ start: cursor, end: nextCal.startMs, partMs: part1Ms })
+          remaining -= part1Ms
+          cursor     = nextCal.startMs
+
+          items.push({ type: 'calblock', event: nextCal, start: nextCal.startMs, end: nextCal.endMs, ongoing: false })
+          cursor = nextCal.endMs
+          calIdx++
+          drainPastCal()
+        }
+      } else {
+        // No overlap — assign remaining time as one chunk
+        splits.push({ start: cursor, end: cursor + remaining, partMs: remaining })
+        cursor    += remaining
+        remaining  = 0
+      }
+    }
+
+    if (splits.length === 1) {
+      // No actual split — single task row
+      items.push({ type: 'task', task, start: splits[0].start, end: splits[0].end, done: false })
+    } else {
+      // Multi-segment split
+      splits.forEach((seg, i) => {
+        items.push({
+          type: 'task-split', task,
+          part: i + 1, totalParts: splits.length,
+          start: seg.start, end: seg.end,
+          partMs: seg.partMs, estMs,
+          done: false,
+        })
+      })
+    }
+  }
+
+  // Append any future cal events not yet inserted
+  while (calIdx < sortedCal.length) {
+    const cal = sortedCal[calIdx++]
+    if (cal.endMs > cursorMs) {
+      items.push({ type: 'calblock', event: cal, start: cal.startMs, end: cal.endMs, ongoing: false })
+    }
+  }
+
+  // Unknown tasks always go at the end with no time window
+  for (const task of unknownTasks) {
+    items.push({ type: 'unknown', task, done: !!gp.done[task.id] })
+  }
+
+  return items
+}
 
 // ── Component ────────────────────────────────────────────────────
 export default function GamePlanView() {
   const { tasks, dataUid, updateTask } = useStore()
-  const [gp, setGp] = useState(null)
-  const [now, setNow] = useState(Date.now())
-  const [editingId, setEditingId] = useState(null)
-  const [askMsg, setAskMsg] = useState('')
-  const [draggingId, setDraggingId] = useState(null)
-  const [dropTargetId, setDropTargetId] = useState(null)
-  // Inherited values from previous days (computed defaults — not written until user edits or launches)
+  const [gp,          setGp]          = useState(null)
+  const [now,         setNow]         = useState(Date.now())
+  const [editingId,   setEditingId]   = useState(null)
+  const [askMsg,      setAskMsg]      = useState('')
+  const [draggingId,  setDraggingId]  = useState(null)
+  const [dropTargetId,setDropTargetId]= useState(null)
+  const [gpTab,       setGpTab]       = useState('setup')
+  const [calEvents,   setCalEvents]   = useState([])
+  const [calLoading,  setCalLoading]  = useState(false)
+  const [calError,    setCalError]    = useState(null)
   const [inheritedBs, setInheritedBs] = useState({})
-  const [inheritedEst, setInheritedEst] = useState({})
-  const [gpTab, setGpTab] = useState('setup') // 'setup' | 'run'
+  const [inheritedEst,setInheritedEst]= useState({})
   const dateKey = todayKey()
 
   // 1-second ticker
@@ -76,41 +171,62 @@ export default function GamePlanView() {
     return () => clearInterval(t)
   }, [])
 
-  // Load game plan from Firestore on mount + scan previous days for carryover defaults
+  // Load game plan + carryover scan
   useEffect(() => {
     if (!dataUid) return
     getDoc(doc(db, 'users', dataUid, 'gamePlan', dateKey)).then(async snap => {
       const gpData = snap.exists() ? { ...DEFAULT_GP(), ...snap.data() } : DEFAULT_GP()
       setGp(gpData)
 
-      // Carryover: find tasks with no saved values and look up past docs
-      const allTodayIds = [] // will be populated after tasks load; scan happens below lazily
+      // Carryover: scan last 7 gamePlan docs for inherited values
       try {
-        const colRef = collection(db, 'users', dataUid, 'gamePlan')
+        const colRef   = collection(db, 'users', dataUid, 'gamePlan')
         const pastSnap = await getDocs(query(colRef, orderBy('__name__', 'desc'), limit(8)))
-        const pastDocs = pastSnap.docs
-          .filter(d => d.id < dateKey) // only dates strictly before today
-          .slice(0, 7)
-
-        const bsMap = {}
-        const estMap = {}
+        const pastDocs = pastSnap.docs.filter(d => d.id < dateKey).slice(0, 7)
+        const bsMap = {}, estMap = {}
         for (const pd of pastDocs) {
           const d = pd.data()
-          const pBs  = d.brainspace || {}
-          const pEst = d.estimates  || {}
-          const pOrder = d.order || []
-          for (const tid of pOrder) {
-            if (!(tid in bsMap)  && pBs[tid])  bsMap[tid]  = pBs[tid]
-            if (!(tid in estMap) && pEst[tid]) estMap[tid] = pEst[tid]
+          for (const tid of (d.order || [])) {
+            if (!(tid in bsMap)  && d.brainspace?.[tid]) bsMap[tid]  = d.brainspace[tid]
+            if (!(tid in estMap) && d.estimates?.[tid])  estMap[tid] = d.estimates[tid]
           }
         }
         setInheritedBs(bsMap)
         setInheritedEst(estMap)
-      } catch (_) {
-        // Non-critical — carryover is best-effort
-      }
+      } catch (_) {} // non-critical
     })
   }, [dataUid, dateKey])
+
+  // Fetch calendar events using Firebase ID token for auth
+  const fetchCalendar = useCallback(async () => {
+    const user = auth.currentUser
+    if (!user) return // not signed in yet — will retry when called again
+    setCalLoading(true)
+    setCalError(null)
+    try {
+      const idToken = await user.getIdToken()
+      const res     = await fetch('/api/calendar-today', {
+        headers: { Authorization: `Bearer ${idToken}` },
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setCalEvents(data.events || [])
+      } else {
+        // If calendar creds not yet configured, fail silently
+        if (res.status === 500 && data.error?.includes('refresh')) {
+          setCalEvents([]) // creds not set up yet
+        } else {
+          setCalError(data.error || 'Calendar fetch failed')
+        }
+      }
+    } catch (e) {
+      setCalError(e.message)
+    } finally {
+      setCalLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchCalendar() }, [fetchCalendar])
 
   // Persist a partial update to Firestore (merge)
   const persist = useCallback((fields) => {
@@ -118,7 +234,6 @@ export default function GamePlanView() {
     setDoc(doc(db, 'users', dataUid, 'gamePlan', dateKey), fields, { merge: true })
   }, [dataUid, dateKey])
 
-  // Update local state + persist
   const update = useCallback((fields) => {
     setGp(prev => {
       const next = { ...prev, ...fields }
@@ -136,53 +251,47 @@ export default function GamePlanView() {
   }
 
   // ── Derive task list ─────────────────────────────────────────
-  // Today's open tasks (not completed in B Things)
-  const todayTasks = tasks.filter(t => t.bucket === 'today' && !t.completed)
-
-  // Canonical order: saved order first, then any new tasks appended
-  const savedOrder = gp.order || []
+  const todayTasks   = tasks.filter(t => t.bucket === 'today' && !t.completed)
+  const savedOrder   = gp.order || []
   const orderedTasks = [
     ...savedOrder.map(id => todayTasks.find(t => t.id === id)).filter(Boolean),
     ...todayTasks.filter(t => !savedOrder.includes(t.id)),
   ]
-
-  // Split: unknown-scope tasks go to the bottom with no time block
   const activeTasks  = orderedTasks.filter(t => (gp.brainspace[t.id] || 'medium') !== 'unknown')
   const unknownTasks = orderedTasks.filter(t => (gp.brainspace[t.id] || 'medium') === 'unknown')
   const planTasks    = [...activeTasks, ...unknownTasks]
 
-  // Current (first non-done active task)
-  const currentTask = activeTasks.find(t => !gp.done[t.id]) || null
-  const isFocusing  = !gp.onBreak && !!gp.focusId && currentTask?.id === gp.focusId
+  // ── Build render plan ────────────────────────────────────────
+  const planCursor  = gp.planStart || now
+  const renderPlan  = buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, planCursor)
 
-  // ── Schedule projection ──────────────────────────────────────
-  let cursor = now
-  const schedule = {}
-  for (const t of activeTasks) {
-    if (gp.done[t.id]) { schedule[t.id] = { done: true }; continue }
-    const estMs = (gp.estimates[t.id] || 30) * 60000
-    if (!gp.onBreak && isFocusing && gp.focusId === t.id) {
-      schedule[t.id] = { start: gp.focusStart, end: gp.focusStart + estMs }
-      cursor = Math.max(gp.focusStart + estMs, now)
-    } else {
-      schedule[t.id] = { start: cursor, end: cursor + estMs }
-      cursor += estMs
-    }
-  }
-  unknownTasks.forEach(t => { schedule[t.id] = { unknown: true } })
-  const projectedEnd = cursor
+  // Current active task (first non-done task item)
+  const currentTaskItem = renderPlan.find(
+    item => (item.type === 'task' || item.type === 'task-split') && !item.done
+  ) || null
+  const currentTask = currentTaskItem?.task || null
+
+  // Are we currently in a meeting?
+  const currentMeeting = calEvents.find(e => e.startMs <= now && e.endMs > now) || null
+
+  // Focus state
+  const isFocusing = !gp.onBreak && !!gp.focusId && currentTask?.id === gp.focusId
+
+  // Projected end: last task or calblock end time
+  const lastItem      = renderPlan.filter(i => i.type !== 'unknown' && i.end).slice(-1)[0]
+  const projectedEnd  = lastItem?.end || now
 
   // ── Focus display ────────────────────────────────────────────
   let focusLeftMin = 0, focusIsOver = false, focusFrac = 0
   if (isFocusing && currentTask) {
-    const estMs = (gp.estimates[currentTask.id] || 30) * 60000
-    const leftMs = gp.focusStart + estMs - now
-    focusIsOver  = leftMs < 0
-    focusLeftMin = Math.ceil(Math.abs(leftMs) / 60000)
-    focusFrac    = focusIsOver ? 1 : 1 - leftMs / estMs
+    const estMs   = (gp.estimates[currentTask.id] || 30) * 60000
+    const leftMs  = gp.focusStart + estMs - now
+    focusIsOver   = leftMs < 0
+    focusLeftMin  = Math.ceil(Math.abs(leftMs) / 60000)
+    focusFrac     = focusIsOver ? 1 : 1 - leftMs / estMs
   }
 
-  // ── Break / progress state ───────────────────────────────────
+  // ── Break / progress ─────────────────────────────────────────
   const breakMin      = gp.onBreak ? Math.floor((now - gp.breakStart) / 60000) : 0
   const sinceBreakMin = Math.round((now - (gp.lastBreak || now)) / 60000)
   const breakDue      = !gp.onBreak && sinceBreakMin >= BREAK_DUE_MIN
@@ -194,7 +303,7 @@ export default function GamePlanView() {
   // ── Actions ──────────────────────────────────────────────────
   function markDone(taskId) {
     update({ done: { ...gp.done, [taskId]: true } })
-    updateTask(taskId, { completed: true })          // sync to B Things
+    updateTask(taskId, { completed: true })
     if (gp.focusId === taskId) update({ focusId: null, focusStart: null })
   }
 
@@ -217,11 +326,8 @@ export default function GamePlanView() {
 
   function smartSort() {
     const withRank = orderedTasks.map((t, i) => ({
-      id: t.id,
-      rank: BS_SORT[gp.brainspace[t.id] || 'medium'],
-      i,
+      id: t.id, rank: BS_SORT[gp.brainspace[t.id] || 'medium'], i,
     }))
-    // Stable sort within each brainspace tier
     withRank.sort((a, b) => a.rank !== b.rank ? a.rank - b.rank : a.i - b.i)
     update({ order: withRank.map(x => x.id) })
   }
@@ -246,13 +352,10 @@ export default function GamePlanView() {
   function onDragOver(e, targetId) {
     e.preventDefault()
     if (!draggingId || draggingId === targetId) return
-    // Build current full order
     const base = planTasks.map(t => t.id)
-    const from = base.indexOf(draggingId)
-    const to   = base.indexOf(targetId)
+    const from = base.indexOf(draggingId), to = base.indexOf(targetId)
     if (from === -1 || to === -1) return
-    base.splice(from, 1)
-    base.splice(to, 0, draggingId)
+    base.splice(from, 1); base.splice(to, 0, draggingId)
     setGp(prev => ({ ...prev, order: base }))
   }
 
@@ -264,26 +367,133 @@ export default function GamePlanView() {
 
   // ── "How am I doing?" ────────────────────────────────────────
   function howAmIDoing() {
-    if (gp.onBreak) {
-      return `You're on a break (${Math.floor((now - gp.breakStart) / 60000)} min) — step away fully, the plan re-flows the moment you're back.`
-    }
-    const done  = doneCount
-    const total = totalCount
-    const pctLocal = total ? Math.round(done / total * 100) : 0
+    if (gp.onBreak) return `On break (${Math.floor((now - gp.breakStart) / 60000)} min) — step away fully, the plan re-flows when you're back.`
+    const pctLocal = totalCount ? Math.round(doneCount / totalCount * 100) : 0
     const deepRemaining = activeTasks.filter(t => !gp.done[t.id] && (gp.brainspace[t.id] || 'medium') === 'deep').length
-    const allAdminRemaining = activeTasks.filter(t => !gp.done[t.id]).every(t => ['low', 'unknown'].includes(gp.brainspace[t.id] || 'medium'))
+    const allLowRemaining = activeTasks.filter(t => !gp.done[t.id]).every(t => ['low', 'unknown'].includes(gp.brainspace[t.id] || 'medium'))
     const six = new Date(); six.setHours(18, 0, 0, 0)
-
     if (!currentTask) return "Board's clear — that's a complete day; close the laptop and let it count."
     if (sinceBreakMin >= 90) return `${sinceBreakMin} min since your last break — you're running on fumes; take 10 and you'll close sharper.`
-    if (deepRemaining >= 2 && now > six.getTime() - 2 * 3600000) {
-      return `${deepRemaining} deep-focus tasks still ahead late in the day — decide now: power through, or push the non-urgent ones to tomorrow.`
-    }
-    if (allAdminRemaining && done > 0) return "You're in the admin home stretch — mechanical from here, just execute and coast."
-    if (done === 0) return `Fresh board — start on "${currentTask.title}" and the first checkmark drags the rest into motion.`
-    if (pctLocal >= 75) return `${done} of ${total} done — this is already a strong day; protect the win and don't invent new work to fill the gap.`
-    if (projectedEnd > six.getTime() + 300000) return `${done} of ${total} done — realistically the tail slips past 6, and that's fine; nail the high-priority ones and the rest is gravy.`
-    return `${done} of ${total} done with "${currentTask.title}" on deck — steady progress, clock's on your side.`
+    if (deepRemaining >= 2 && now > six.getTime() - 2 * 3600000) return `${deepRemaining} deep-focus tasks still ahead late in the day — decide now: power through, or push the non-urgent ones to tomorrow.`
+    if (allLowRemaining && doneCount > 0) return "You're in the low-focus home stretch — mechanical from here, just execute and coast."
+    if (doneCount === 0) return `Fresh board — start on "${currentTask.title}" and the first checkmark drags the rest into motion.`
+    if (pctLocal >= 75) return `${doneCount} of ${totalCount} done — this is already a strong day; protect the win and don't invent new work to fill the gap.`
+    if (projectedEnd > six.getTime() + 300000) return `${doneCount} of ${totalCount} done — realistically the tail slips past 6, and that's fine; nail the high-priority ones and the rest is gravy.`
+    return `${doneCount} of ${totalCount} done with "${currentTask.title}" on deck — steady progress, clock's on your side.`
+  }
+
+  // ── Render helpers ───────────────────────────────────────────
+  function TaskRow({ task, start, end, done: isDone, splitLabel }) {
+    const bs         = gp.brainspace[task.id] || 'medium'
+    const bsCfg      = BS[bs]
+    const isNow      = !isDone && !gp.onBreak && currentTask?.id === task.id
+    const est        = gp.estimates[task.id] || 30
+    const isDragging = draggingId === task.id
+
+    return (
+      <div
+        draggable
+        onDragStart={e => onDragStart(e, task.id)}
+        onDragOver={e => onDragOver(e, task.id)}
+        onDragEnter={() => draggingId && draggingId !== task.id && setDropTargetId(task.id)}
+        onDragLeave={() => setDropTargetId(null)}
+        onDragEnd={onDragEnd}
+        className={`relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
+          isDragging ? 'opacity-40 border-[#378add]' :
+          isDone     ? 'bg-[#f4f2ec] border-transparent' :
+          isNow      ? 'bg-[#fbfcfe] border-l-[3px] border-l-[#378add] border-[#e7e5df]' :
+          'bg-white border-[#e7e5df]'
+        }`}
+      >
+        {dropTargetId === task.id && (
+          <div className="absolute -top-[3px] left-0 right-0 h-[3px] rounded-full bg-[#378add] pointer-events-none z-10" />
+        )}
+        {/* Grip */}
+        <div className="cursor-grab flex-none text-[#bdbbb2] text-lg leading-none">⠿</div>
+        {/* Done circle */}
+        <button
+          onClick={() => !isDone && markDone(task.id)}
+          className={`flex-none w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center ${
+            isDone ? 'bg-[#1d9e75] border-[#1d9e75]' : 'border-[#c7c5bc] hover:border-[#1d9e75]'
+          }`}
+        >
+          {isDone && (
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="w-[11px] h-[11px]">
+              <path d="M5 12l5 5L20 6" />
+            </svg>
+          )}
+        </button>
+        {/* Time window */}
+        <div className="text-[11px] text-[#5f5e5a] tabular-nums min-w-[88px] flex-none">
+          {isDone ? 'done' : (start && end) ? `${fmt(start)}–${fmt(end)}` : ''}
+        </div>
+        {/* Title */}
+        <div className="flex-1 min-w-0">
+          <div className={`text-[14px] flex items-center gap-1.5 flex-wrap ${isDone ? 'line-through text-[#888780]' : 'text-[#2c2c2a]'}`}>
+            <span className="truncate">{task.title}</span>
+            {splitLabel && <span className="text-[10px] text-[#aaa9a1] flex-none">{splitLabel}</span>}
+            {isNow && (
+              <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-full bg-[#e6f1fb] text-[#185fa5] flex-none">
+                {gp.focusId === task.id ? 'focusing' : 'now'}
+              </span>
+            )}
+          </div>
+          {task.notes && (
+            <div className="text-[11.5px] text-[#888780] mt-0.5 truncate">{humanizeNotes(task.notes)}</div>
+          )}
+        </div>
+        {/* Estimate */}
+        <div className="flex-none">
+          {editingId === task.id ? (
+            <input
+              autoFocus type="number" min="1" defaultValue={est}
+              className="w-12 text-[12px] text-center border border-[#b5d4f4] rounded px-1 py-0.5 outline-none bg-white"
+              onBlur={e => saveEstimate(task.id, e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingId(null) }}
+            />
+          ) : (
+            <button
+              onClick={() => !isDone && setEditingId(task.id)}
+              className={`text-[11px] tabular-nums ${isDone ? 'text-[#aaa9a1]' : 'text-[#888780] hover:text-[#185fa5]'}`}
+            >
+              {est}m
+            </button>
+          )}
+        </div>
+        {/* Brainspace badge */}
+        <button
+          onClick={() => !isDone && cycleBrainspace(task.id)}
+          className={`flex-none text-[10.5px] font-medium px-2 py-0.5 rounded-full transition-opacity ${bsCfg.cls} ${isDone ? 'opacity-40 cursor-default' : 'hover:opacity-80'}`}
+        >
+          {bsCfg.label}
+        </button>
+      </div>
+    )
+  }
+
+  function CalBlockRow({ event, ongoing }) {
+    const durMin = Math.round((event.endMs - event.startMs) / 60000)
+    const isPast = event.endMs <= now
+    return (
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-1.5 border select-none ${
+        ongoing ? 'bg-[#fff7ed] border-[#fed7aa]' :
+        isPast  ? 'bg-[#f9f8f5] border-transparent opacity-60' :
+        'bg-[#fdf8f2] border-[#f0e0c4]'
+      }`}>
+        <div className="flex-none text-[#d97706] text-[13px] leading-none">⊘</div>
+        <div className="text-[11px] text-[#b45309] tabular-nums min-w-[88px] flex-none">
+          {fmt(event.startMs)}–{fmt(event.endMs)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className={`text-[13.5px] font-medium truncate ${ongoing ? 'text-[#92400e]' : isPast ? 'text-[#888780]' : 'text-[#78350f]'}`}>
+            {event.title}
+          </div>
+        </div>
+        <div className="flex-none text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-[#fed7aa] text-[#b45309]">
+          {ongoing ? 'now' : `${durMin}m`}
+        </div>
+      </div>
+    )
   }
 
   // ── Render ───────────────────────────────────────────────────
@@ -299,21 +509,33 @@ export default function GamePlanView() {
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </p>
           </div>
-          <div className="text-right">
+          <div className="flex items-center gap-3">
+            {/* Calendar refresh */}
+            <button
+              onClick={fetchCalendar}
+              disabled={calLoading}
+              title={calError ? `Calendar error: ${calError}` : calEvents.length ? `${calEvents.length} event${calEvents.length !== 1 ? 's' : ''} loaded` : 'Refresh calendar'}
+              className={`text-[11.5px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                calError   ? 'border-red-200 text-red-500 bg-red-50' :
+                calLoading ? 'border-[#e7e5df] text-[#bdbbb2] cursor-wait' :
+                calEvents.length ? 'border-[#f0e0c4] text-[#b45309] bg-[#fdf8f2] hover:bg-[#faeeda]' :
+                'border-[#e7e5df] text-[#888780] hover:bg-[#f0ede6]'
+              }`}
+            >
+              {calLoading ? '↻' : calError ? '⚠ cal' : calEvents.length ? `⊘ ${calEvents.length}` : '⊘ cal'}
+            </button>
             <div className="text-[19px] font-medium tabular-nums text-[#2c2c2a]">{fmt(now)}</div>
           </div>
         </div>
 
-        {/* Sub-tabs: Setup | Run */}
+        {/* Sub-tabs */}
         <div className="flex gap-1 mb-5 bg-[#f0ede6] rounded-lg p-1 w-fit">
           {['setup', 'run'].map(tab => (
             <button
               key={tab}
               onClick={() => setGpTab(tab)}
               className={`text-[12.5px] font-medium px-4 py-1.5 rounded-md capitalize transition-colors ${
-                gpTab === tab
-                  ? 'bg-white text-[#2c2c2a] shadow-sm'
-                  : 'text-[#888780] hover:text-[#5f5e5a]'
+                gpTab === tab ? 'bg-white text-[#2c2c2a] shadow-sm' : 'text-[#888780] hover:text-[#5f5e5a]'
               }`}
             >
               {tab === 'setup' ? '⊞ Setup' : '▷ Run'}
@@ -329,16 +551,17 @@ export default function GamePlanView() {
             update={update}
             inheritedBs={inheritedBs}
             inheritedEst={inheritedEst}
+            calEvents={calEvents}
             onLaunch={() => {
-              // On launch, persist any inherited values that haven't been manually set
-              const bsPatch = {}
-              const estPatch = {}
+              // Persist inherited values that haven't been manually set
+              const bsPatch = {}, estPatch = {}
               todayTasks.forEach(t => {
-                if (!gp.brainspace[t.id] && inheritedBs[t.id]) bsPatch[t.id] = inheritedBs[t.id]
+                if (!gp.brainspace[t.id] && inheritedBs[t.id])  bsPatch[t.id]  = inheritedBs[t.id]
                 if (!gp.estimates[t.id]  && inheritedEst[t.id]) estPatch[t.id] = inheritedEst[t.id]
               })
               if (Object.keys(bsPatch).length)  update({ brainspace: { ...gp.brainspace, ...bsPatch } })
               if (Object.keys(estPatch).length)  update({ estimates:  { ...gp.estimates,  ...estPatch } })
+              update({ planStart: Date.now() })
               setGpTab('run')
             }}
           />
@@ -364,8 +587,8 @@ export default function GamePlanView() {
 
         {/* Break bar */}
         <div className={`text-[12px] rounded-lg px-3 py-1.5 mb-3 border ${
-          gp.onBreak  ? 'bg-[#e6f1fb] border-[#b5d4f4] text-[#185fa5] font-medium' :
-          breakDue    ? 'bg-[#faeeda] border-[#fac775] text-[#854f0b] font-medium' :
+          gp.onBreak ? 'bg-[#e6f1fb] border-[#b5d4f4] text-[#185fa5] font-medium' :
+          breakDue   ? 'bg-[#faeeda] border-[#fac775] text-[#854f0b] font-medium' :
           'bg-white border-[#e7e5df] text-[#5f5e5a]'
         }`}>
           {gp.onBreak ? `On break · ${breakMin} min` :
@@ -373,8 +596,16 @@ export default function GamePlanView() {
            `${sinceBreakMin} min since your last break`}
         </div>
 
-        {/* Now card */}
-        {gp.onBreak ? (
+        {/* Now card — meeting in progress takes priority */}
+        {currentMeeting ? (
+          <div className="bg-[#fff7ed] border border-[#fed7aa] rounded-xl px-4 py-3 mb-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-[#b45309] mb-1">meeting in progress</div>
+            <div className="text-[16px] font-medium text-[#78350f] mb-1">{currentMeeting.title}</div>
+            <div className="text-[12px] text-[#b45309]">
+              {fmt(currentMeeting.startMs)}–{fmt(currentMeeting.endMs)} · ends in {Math.ceil((currentMeeting.endMs - now) / 60000)} min
+            </div>
+          </div>
+        ) : gp.onBreak ? (
           <div className="bg-[#eaf3ee] border border-[#9fe1cb] rounded-xl px-4 py-3 mb-4">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-[#0f6e56] mb-1">on a break</div>
             <div className="text-[16px] font-medium text-[#04342c] mb-2">Stepped away — back when you're ready</div>
@@ -392,9 +623,7 @@ export default function GamePlanView() {
           }`}>
             <div className={`text-[11px] font-semibold uppercase tracking-wide mb-1 ${focusIsOver ? 'text-[#854f0b]' : 'text-[#185fa5]'}`}>
               {isFocusing
-                ? (focusIsOver
-                    ? 'over — wrap it or stop the timer'
-                    : `focusing · ends ${fmt(gp.focusStart + (gp.estimates[currentTask.id] || 30) * 60000)}`)
+                ? (focusIsOver ? 'over — wrap it or stop the timer' : `focusing · ends ${fmt(gp.focusStart + (gp.estimates[currentTask.id] || 30) * 60000)}`)
                 : `up next · ~${gp.estimates[currentTask.id] || 30} min`}
             </div>
             <div className={`text-[16px] font-medium mb-2 ${focusIsOver ? 'text-[#412402]' : 'text-[#042c53]'}`}>
@@ -403,12 +632,8 @@ export default function GamePlanView() {
             {isFocusing && (
               <>
                 <div className="flex items-baseline gap-1.5 mb-1">
-                  <span className={`text-[30px] font-medium tabular-nums leading-none ${focusIsOver ? 'text-[#854f0b]' : 'text-[#0c447c]'}`}>
-                    {focusLeftMin}
-                  </span>
-                  <span className={`text-[13px] ${focusIsOver ? 'text-[#854f0b]' : 'text-[#185fa5]'}`}>
-                    {focusIsOver ? 'min over' : 'min left'}
-                  </span>
+                  <span className={`text-[30px] font-medium tabular-nums leading-none ${focusIsOver ? 'text-[#854f0b]' : 'text-[#0c447c]'}`}>{focusLeftMin}</span>
+                  <span className={`text-[13px] ${focusIsOver ? 'text-[#854f0b]' : 'text-[#185fa5]'}`}>{focusIsOver ? 'min over' : 'min left'}</span>
                 </div>
                 <div className={`h-[5px] rounded-full overflow-hidden mb-3 ${focusIsOver ? 'bg-[#f4dcae]' : 'bg-[#cfe2f6]'}`}>
                   <div
@@ -419,12 +644,7 @@ export default function GamePlanView() {
               </>
             )}
             <div className="flex gap-2 flex-wrap mt-1">
-              <button
-                onClick={toggleFocus}
-                className={`text-[12px] font-medium px-3 py-1.5 rounded-full border active:scale-[.98] ${
-                  isFocusing ? 'bg-white text-[#185fa5] border-[#b5d4f4]' : 'bg-[#378add] text-white border-[#378add]'
-                }`}
-              >
+              <button onClick={toggleFocus} className={`text-[12px] font-medium px-3 py-1.5 rounded-full border active:scale-[.98] ${isFocusing ? 'bg-white text-[#185fa5] border-[#b5d4f4]' : 'bg-[#378add] text-white border-[#378add]'}`}>
                 {isFocusing ? 'Stop focus' : 'Start focus'}
               </button>
               <button onClick={() => markDone(currentTask.id)} className="text-[12px] font-medium px-3 py-1.5 rounded-full bg-white text-[#185fa5] border border-[#b5d4f4] active:scale-[.98]">
@@ -437,7 +657,7 @@ export default function GamePlanView() {
           </div>
         ) : null}
 
-        {/* Projected finish + remaining */}
+        {/* Projected finish */}
         <div className="text-[12px] text-[#0f6e56] mb-3">
           {currentTask
             ? gp.onBreak
@@ -446,16 +666,14 @@ export default function GamePlanView() {
             : 'All blocks cleared. Go home.'}
         </div>
 
-        {/* Header row: count + smart sort */}
+        {/* Header row */}
         <div className="flex items-center justify-between mb-2">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-[#888780]">
             Today · {planTasks.length} task{planTasks.length !== 1 ? 's' : ''}
+            {calEvents.length > 0 && ` · ${calEvents.length} event${calEvents.length !== 1 ? 's' : ''}`}
           </div>
           {planTasks.length > 1 && (
-            <button
-              onClick={smartSort}
-              className="text-[11.5px] font-medium text-[#185fa5] bg-[#eef5fd] border border-[#b5d4f4] rounded-full px-2.5 py-1 hover:bg-[#e1eefb] active:scale-[.98] transition-transform"
-            >
+            <button onClick={smartSort} className="text-[11.5px] font-medium text-[#185fa5] bg-[#eef5fd] border border-[#b5d4f4] rounded-full px-2.5 py-1 hover:bg-[#e1eefb] active:scale-[.98] transition-transform">
               ✦ Smart sort
             </button>
           )}
@@ -467,116 +685,47 @@ export default function GamePlanView() {
         </div>
         <div className="text-[12px] text-[#888780] mb-3">{doneCount} of {totalCount} done · {pct}%</div>
 
-        {/* Task rows */}
+        {/* Render plan rows */}
         <div>
-          {planTasks.map(task => {
-            const bs       = gp.brainspace[task.id] || 'medium'
-            const bsCfg    = BS[bs]
-            const isDone   = !!gp.done[task.id]
-            const isUnknown = bs === 'unknown'
-            const isNow    = !isDone && !gp.onBreak && currentTask?.id === task.id
-            const sched    = schedule[task.id] || {}
-            const est      = gp.estimates[task.id] || 30
-            const isDragging = draggingId === task.id
-
-            return (
-              <div
-                key={task.id}
-                draggable
-                onDragStart={e => onDragStart(e, task.id)}
-                onDragOver={e => onDragOver(e, task.id)}
-                onDragEnter={() => draggingId && draggingId !== task.id && setDropTargetId(task.id)}
-                onDragLeave={() => setDropTargetId(null)}
-                onDragEnd={onDragEnd}
-                className={`relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
-                  isDragging ? 'opacity-40 border-[#378add]' :
-                  isDone     ? 'bg-[#f4f2ec] border-transparent' :
-                  isNow      ? 'bg-[#fbfcfe] border-l-[3px] border-l-[#378add] border-[#e7e5df]' :
-                  isUnknown  ? 'bg-white border-dashed border-[#e7e5df] opacity-75' :
-                  'bg-white border-[#e7e5df]'
-                }`}
-              >
-                {dropTargetId === task.id && (
-                  <div className="absolute -top-[3px] left-0 right-0 h-[3px] rounded-full bg-[#378add] pointer-events-none z-10" />
-                )}
-                {/* Grip */}
-                <div className="cursor-grab flex-none text-[#bdbbb2] text-lg leading-none">⠿</div>
-
-                {/* Done circle */}
-                <button
-                  onClick={() => !isDone && markDone(task.id)}
-                  className={`flex-none w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center ${
-                    isDone ? 'bg-[#1d9e75] border-[#1d9e75]' : 'border-[#c7c5bc] hover:border-[#1d9e75]'
-                  }`}
-                >
-                  {isDone && (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" className="w-[11px] h-[11px]">
-                      <path d="M5 12l5 5L20 6" />
-                    </svg>
-                  )}
-                </button>
-
-                {/* Time window */}
-                <div className="text-[11px] text-[#5f5e5a] tabular-nums min-w-[88px] flex-none">
-                  {isDone     ? 'done' :
-                   isUnknown  ? '— open-ended' :
-                   sched.start ? `${fmt(sched.start)}–${fmt(sched.end)}` : ''}
+          {renderPlan.map((item, idx) => {
+            if (item.type === 'task') {
+              return <TaskRow key={item.task.id} task={item.task} start={item.start} end={item.end} done={item.done} />
+            }
+            if (item.type === 'task-split') {
+              return (
+                <TaskRow
+                  key={`${item.task.id}-p${item.part}`}
+                  task={item.task}
+                  start={item.start}
+                  end={item.end}
+                  done={item.done}
+                  splitLabel={`(${item.part}/${item.totalParts})`}
+                />
+              )
+            }
+            if (item.type === 'calblock') {
+              return <CalBlockRow key={`cal-${item.event.id}-${idx}`} event={item.event} ongoing={item.ongoing} />
+            }
+            if (item.type === 'unknown') {
+              const bs = gp.brainspace[item.task.id] || 'unknown'
+              return (
+                <div key={item.task.id} className="flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border bg-white border-dashed border-[#e7e5df] opacity-75 select-none">
+                  <div className="cursor-grab flex-none text-[#bdbbb2] text-lg leading-none">⠿</div>
+                  <button
+                    onClick={() => markDone(item.task.id)}
+                    className="flex-none w-[18px] h-[18px] rounded-full border-[1.5px] border-[#c7c5bc] hover:border-[#1d9e75] flex items-center justify-center"
+                  />
+                  <div className="text-[11px] text-[#5f5e5a] tabular-nums min-w-[88px] flex-none">— open-ended</div>
+                  <div className="flex-1 min-w-0 text-[14px] text-[#2c2c2a] truncate">{item.task.title}</div>
+                  <button onClick={() => cycleBrainspace(item.task.id)} className="flex-none text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 hover:opacity-80">?</button>
                 </div>
-
-                {/* Title + now pill */}
-                <div className="flex-1 min-w-0">
-                  <div className={`text-[14px] flex items-center gap-1.5 flex-wrap ${isDone ? 'line-through text-[#888780]' : 'text-[#2c2c2a]'}`}>
-                    <span className="truncate">{task.title}</span>
-                    {isNow && (
-                      <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-full bg-[#e6f1fb] text-[#185fa5] flex-none">
-                        {gp.focusId === task.id ? 'focusing' : 'now'}
-                      </span>
-                    )}
-                  </div>
-                  {task.notes && (
-                    <div className="text-[11.5px] text-[#888780] mt-0.5 truncate">{humanizeNotes(task.notes)}</div>
-                  )}
-                </div>
-
-                {/* Estimate (tap to edit) */}
-                <div className="flex-none">
-                  {editingId === task.id ? (
-                    <input
-                      autoFocus
-                      type="number"
-                      min="1"
-                      defaultValue={est}
-                      className="w-12 text-[12px] text-center border border-[#b5d4f4] rounded px-1 py-0.5 outline-none bg-white"
-                      onBlur={e => saveEstimate(task.id, e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') e.currentTarget.blur()
-                        if (e.key === 'Escape') setEditingId(null)
-                      }}
-                    />
-                  ) : (
-                    <button
-                      onClick={() => !isDone && setEditingId(task.id)}
-                      className={`text-[11px] tabular-nums ${isDone ? 'text-[#aaa9a1]' : 'text-[#888780] hover:text-[#185fa5]'}`}
-                    >
-                      {est}m
-                    </button>
-                  )}
-                </div>
-
-                {/* Brainspace badge */}
-                <button
-                  onClick={() => !isDone && cycleBrainspace(task.id)}
-                  className={`flex-none text-[10.5px] font-medium px-2 py-0.5 rounded-full transition-opacity ${bsCfg.cls} ${isDone ? 'opacity-40 cursor-default' : 'hover:opacity-80'}`}
-                >
-                  {bsCfg.label}
-                </button>
-              </div>
-            )
+              )
+            }
+            return null
           })}
         </div>
 
-        {/* Empty state */}
-        {planTasks.length === 0 && (
+        {renderPlan.length === 0 && (
           <div className="text-center text-[13px] text-[#888780] py-10">
             No tasks in Today — add some from the board first, then come back here to plan.
           </div>
@@ -590,10 +739,7 @@ export default function GamePlanView() {
 }
 
 // ── SetupTable ────────────────────────────────────────────────────
-// Morning setup: configure brainspace + time for every task in one grid.
-// `tasks` is already filtered to today's non-completed tasks.
-function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inheritedEst = {}, onLaunch }) {
-  // Local estimate edits tracked by taskId
+function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inheritedEst = {}, calEvents = [], onLaunch }) {
   const [estInputs, setEstInputs] = useState({})
 
   function setBs(taskId, bs) {
@@ -606,10 +752,6 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
     setEstInputs(prev => { const n = { ...prev }; delete n[taskId]; return n })
   }
 
-  const allSet = todayTasks.length > 0 && todayTasks.every(t =>
-    gp.brainspace[t.id] && gp.brainspace[t.id] !== 'medium'
-  )
-
   if (todayTasks.length === 0) {
     return (
       <div className="text-center text-[13px] text-[#888780] py-10">
@@ -618,42 +760,59 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
     )
   }
 
+  const totalMin = todayTasks.reduce((s, t) => s + (gp.estimates[t.id] || inheritedEst[t.id] || 30), 0)
+  const meetingMin = calEvents.reduce((s, e) => s + Math.round((e.endMs - e.startMs) / 60000), 0)
+
   return (
     <div>
       <p className="text-[12.5px] text-[#5f5e5a] mb-4">
-        Set brainspace and time for each task, then hit <strong>Launch plan</strong> to run the day.
+        Set focus level and time for each task, then hit <strong>Launch plan</strong> to run the day.
       </p>
 
-      {/* Table */}
+      {/* Calendar events preview */}
+      {calEvents.length > 0 && (
+        <div className="mb-4 rounded-xl border border-[#f0e0c4] overflow-hidden">
+          <div className="px-4 py-2 bg-[#fdf8f2] border-b border-[#f0e0c4]">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-[#b45309]">⊘ Locked calendar blocks</span>
+          </div>
+          {calEvents.sort((a, b) => a.startMs - b.startMs).map(e => {
+            const durMin = Math.round((e.endMs - e.startMs) / 60000)
+            return (
+              <div key={e.id} className="flex items-center gap-3 px-4 py-2 border-b border-[#f9f1e7] last:border-0">
+                <span className="text-[11px] text-[#b45309] tabular-nums min-w-[110px]">
+                  {new Date(e.startMs).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}–
+                  {new Date(e.endMs).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </span>
+                <span className="text-[13px] text-[#78350f] flex-1 truncate">{e.title}</span>
+                <span className="text-[11px] text-[#b45309]">{durMin}m</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Task table */}
       <div className="rounded-xl border border-[#e7e5df] overflow-hidden bg-white mb-4">
-        {/* Column headers */}
         <div className="grid grid-cols-[1fr_auto_auto] gap-0 border-b border-[#e7e5df] bg-[#f5f3ed]">
           <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#888780]">Task</div>
-          <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#888780] text-center min-w-[220px]">Brainspace</div>
+          <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#888780] text-center min-w-[220px]">Focus level</div>
           <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#888780] text-center min-w-[72px]">Min</div>
         </div>
 
         {todayTasks.map((task, idx) => {
-          const bs  = gp.brainspace[task.id] || inheritedBs[task.id] || null
-          const isInheritedBs = !gp.brainspace[task.id] && !!inheritedBs[task.id]
-          const est = estInputs[task.id] !== undefined ? estInputs[task.id] : (gp.estimates[task.id] || inheritedEst[task.id] || 30)
+          const bs             = gp.brainspace[task.id] || inheritedBs[task.id] || null
+          const isInheritedBs  = !gp.brainspace[task.id] && !!inheritedBs[task.id]
+          const est            = estInputs[task.id] !== undefined ? estInputs[task.id] : (gp.estimates[task.id] || inheritedEst[task.id] || 30)
           const isInheritedEst = !gp.estimates[task.id] && !!inheritedEst[task.id] && estInputs[task.id] === undefined
-          const isLast = idx === todayTasks.length - 1
+          const isLast         = idx === todayTasks.length - 1
 
           return (
-            <div
-              key={task.id}
-              className={`grid grid-cols-[1fr_auto_auto] gap-0 items-center ${!isLast ? 'border-b border-[#f0ede6]' : ''}`}
-            >
-              {/* Task title */}
+            <div key={task.id} className={`grid grid-cols-[1fr_auto_auto] gap-0 items-center ${!isLast ? 'border-b border-[#f0ede6]' : ''}`}>
               <div className="px-4 py-3">
                 <div className="text-[13.5px] text-[#2c2c2a] font-medium leading-snug truncate">{task.title}</div>
-                {task.notes && (
-                  <div className="text-[11.5px] text-[#aaa9a1] truncate mt-0.5">{task.notes}</div>
-                )}
+                {task.notes && <div className="text-[11.5px] text-[#aaa9a1] truncate mt-0.5">{task.notes}</div>}
               </div>
 
-              {/* Brainspace segmented selector */}
               <div className="px-4 py-3 flex items-center gap-1 min-w-[220px]" title={isInheritedBs ? 'Carried over from a previous day' : undefined}>
                 {[
                   { key: 'deep',    label: 'Deep',   active: 'bg-blue-100 text-blue-700 ring-1 ring-blue-300',    inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
@@ -664,28 +823,18 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
                   <button
                     key={opt.key}
                     onClick={() => setBs(task.id, opt.key)}
-                    className={`text-[11.5px] font-medium px-2.5 py-1 rounded-md transition-all ${
-                      bs === opt.key ? opt.active : opt.inactive
-                    }`}
+                    className={`text-[11.5px] font-medium px-2.5 py-1 rounded-md transition-all ${bs === opt.key ? opt.active : opt.inactive}`}
                   >
                     {opt.label}
                   </button>
                 ))}
-                {/* Unset hint / inherited indicator */}
-                {!bs && (
-                  <span className="text-[11px] text-[#ccc8be] ml-1">← pick one</span>
-                )}
-                {isInheritedBs && (
-                  <span className="text-[10px] text-[#aaa9a1] ml-1" title="Carried over from a previous day">↩</span>
-                )}
+                {!bs && <span className="text-[11px] text-[#ccc8be] ml-1">← pick one</span>}
+                {isInheritedBs && <span className="text-[10px] text-[#aaa9a1] ml-1" title="Carried over">↩</span>}
               </div>
 
-              {/* Time estimate */}
               <div className="px-4 py-3 min-w-[72px] flex items-center justify-center">
                 <input
-                  type="number"
-                  min="1"
-                  value={est}
+                  type="number" min="1" value={est}
                   onChange={e => setEstInputs(prev => ({ ...prev, [task.id]: e.target.value }))}
                   onBlur={e => commitEst(task.id, e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
@@ -700,9 +849,9 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
       {/* Summary + launch */}
       <div className="flex items-center justify-between">
         <div className="text-[12px] text-[#888780]">
-          {todayTasks.filter(t => gp.brainspace[t.id]).length} of {todayTasks.length} tasks configured
-          {' · '}
-          {todayTasks.reduce((s, t) => s + (gp.estimates[t.id] || 30), 0)} min total
+          {todayTasks.filter(t => gp.brainspace[t.id] || inheritedBs[t.id]).length} of {todayTasks.length} configured
+          {' · '}{totalMin} min work
+          {meetingMin > 0 && ` · ${meetingMin} min in meetings`}
         </div>
         <button
           onClick={onLaunch}

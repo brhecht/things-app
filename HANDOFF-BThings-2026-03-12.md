@@ -138,3 +138,8 @@ things-app/
 - Investigate root cause of Vercel auto-deploy blocking
 - Should /api/notify-nico.js be removed now that /api/notify.js exists?
 - Clean up debug console.logs across components
+
+### 2026-06-12 — Game Plan v2: calendar blocks, Low focus level, drag UX, carryover
+- **What shipped:** Renamed Admin→Low focus level; drag-drop blue line indicator; carryover inheritance (pre-fills yesterday's values as defaults on launch); calendar integration scaffold — `api/calendar-today.js` fetches from primary Google Calendar (Firebase ID token auth), `buildRenderPlan()` slots hard calendar blocks into the schedule and splits any task that overlaps a meeting; `SetupTable` shows locked calendar blocks before launch
+- **Known issues:** Calendar creds not yet configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_CALENDAR_REFRESH_TOKEN not in Vercel) — cal block renders silently empty until Brian runs `scripts/get-calendar-token.js` and adds vars to Vercel
+- **Next:** Brian runs one-time OAuth setup (see Step 5 instructions below); after vars are in Vercel + redeployed, calendar blocks will populate automatically
