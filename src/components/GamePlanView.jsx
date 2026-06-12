@@ -58,7 +58,7 @@ function fmtDur(ms) {
 }
 
 const DEFAULT_GP = () => ({
-  order: [], done: {}, estimates: {}, brainspace: {},
+  order: [], done: {}, estimates: {}, brainspace: {}, suppressed: [],
   focusId: null, focusStart: null, planStart: null,
   onBreak: false, breakStart: null, lastBreak: Date.now(),
 })
@@ -269,7 +269,9 @@ export default function GamePlanView() {
   }
 
   // ── Derive task list ─────────────────────────────────────────
-  const todayTasks   = tasks.filter(t => t.bucket === 'today' && !t.completed)
+  const suppressed   = gp.suppressed || []
+  const todayTasks   = tasks.filter(t => t.bucket === 'today' && !t.completed && !suppressed.includes(t.id))
+  const parkedTasks  = tasks.filter(t => t.bucket === 'today' && !t.completed && suppressed.includes(t.id))
   const savedOrder   = gp.order || []
   const orderedTasks = [
     ...savedOrder.map(id => todayTasks.find(t => t.id === id)).filter(Boolean),
@@ -278,6 +280,13 @@ export default function GamePlanView() {
   const activeTasks  = orderedTasks.filter(t => (gp.brainspace[t.id] || 'medium') !== 'unknown')
   const unknownTasks = orderedTasks.filter(t => (gp.brainspace[t.id] || 'medium') === 'unknown')
   const planTasks    = [...activeTasks, ...unknownTasks]
+
+  function parkTask(taskId) {
+    update({ suppressed: [...suppressed, taskId] })
+  }
+  function unparkTask(taskId) {
+    update({ suppressed: suppressed.filter(id => id !== taskId) })
+  }
 
   // ── Build render plan ────────────────────────────────────────
   const planCursor  = gp.planStart || now
@@ -425,7 +434,7 @@ export default function GamePlanView() {
         onDragLeave={() => setDropTargetId(null)}
         onDragEnd={onDragEnd}
         onClick={() => { if (!wasDraggingRef.current) setSelectedTask(task) }}
-        className={`cursor-pointer relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
+        className={`group cursor-pointer relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
           isDragging ? 'opacity-40 border-[#378add]' :
           isDone     ? 'bg-[#f4f2ec] border-transparent' :
           isNow      ? 'bg-[#fbfcfe] border-l-[3px] border-l-[#378add] border-[#e7e5df]' :
@@ -494,6 +503,15 @@ export default function GamePlanView() {
         >
           {bsCfg.label}
         </button>
+        {!isDone && (
+          <button
+            onClick={e => { e.stopPropagation(); parkTask(task.id) }}
+            className="flex-none opacity-0 group-hover:opacity-100 text-[10.5px] px-2 py-0.5 rounded-full text-[#aaa9a1] hover:bg-[#f0ede6] hover:text-[#888780] transition-opacity"
+            title="Park for today"
+          >
+            Park
+          </button>
+        )}
       </div>
     )
   }
@@ -580,6 +598,9 @@ export default function GamePlanView() {
             inheritedEst={inheritedEst}
             calEvents={calEvents}
             onTaskClick={setSelectedTask}
+            parkedTasks={parkedTasks}
+            onPark={parkTask}
+            onUnpark={unparkTask}
             onLaunch={() => {
               // Persist inherited values that haven't been manually set
               const bsPatch = {}, estPatch = {}
@@ -759,6 +780,23 @@ export default function GamePlanView() {
           </div>
         )}
 
+        {parkedTasks.length > 0 && (
+          <div className="mt-4 border-t border-[#f0ede6] pt-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-[#bdbbb2] mb-2">Parked today</div>
+            {parkedTasks.map(task => (
+              <div key={task.id} className="flex items-center justify-between px-3 py-2 rounded-lg mb-1 bg-[#f9f8f5]">
+                <span className="text-[13px] text-[#bdbbb2] truncate flex-1">{task.title}</span>
+                <button
+                  onClick={() => unparkTask(task.id)}
+                  className="flex-none ml-3 text-[11px] font-medium px-2 py-0.5 rounded-full text-[#888780] hover:bg-[#e7e5df] hover:text-[#2c2c2a]"
+                >
+                  Add back
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         </ErrorBoundary>}
 
       {selectedTask && <TaskModal task={selectedTask} onClose={() => setSelectedTask(null)} />}
@@ -768,7 +806,7 @@ export default function GamePlanView() {
 }
 
 // ── SetupTable ────────────────────────────────────────────────────
-function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inheritedEst = {}, calEvents = [], onLaunch, onTaskClick }) {
+function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inheritedEst = {}, calEvents = [], onLaunch, onTaskClick, parkedTasks = [], onPark, onUnpark }) {
   const [estInputs, setEstInputs] = useState({})
 
   function setBs(taskId, bs) {
@@ -836,7 +874,7 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
           const isLast         = idx === todayTasks.length - 1
 
           return (
-            <div key={task.id} className={`grid grid-cols-[1fr_auto_auto] gap-0 items-center ${!isLast ? 'border-b border-[#f0ede6]' : ''}`}>
+            <div key={task.id} className={`group grid grid-cols-[1fr_auto_auto_auto] gap-0 items-center ${!isLast ? 'border-b border-[#f0ede6]' : ''}`}>
               <div className="px-4 py-3 cursor-pointer" onClick={() => onTaskClick && onTaskClick(task)}>
                 <div className="text-[13.5px] text-[#2c2c2a] font-medium leading-snug truncate">{task.title}</div>
                 {task.notes && <div className="text-[11.5px] text-[#aaa9a1] truncate mt-0.5">{task.notes}</div>}
@@ -870,10 +908,36 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
                   className={`w-14 text-[13px] text-center border rounded-lg px-2 py-1.5 outline-none focus:border-[#b5d4f4] bg-white text-[#2c2c2a] tabular-nums ${isInheritedEst ? 'border-dashed border-[#c7c5bc]' : 'border-[#e7e5df]'}`}
                 />
               </div>
+              <div className="px-2 py-3 flex items-center">
+                <button
+                  onClick={() => onPark && onPark(task.id)}
+                  className="opacity-0 group-hover:opacity-100 text-[11px] font-medium px-2 py-0.5 rounded-full text-[#aaa9a1] hover:bg-[#f0ede6] hover:text-[#888780] transition-opacity"
+                  title="Park for today"
+                >
+                  Park
+                </button>
+              </div>
             </div>
           )
         })}
       </div>
+
+      {parkedTasks.length > 0 && (
+        <div className="mt-4 border-t border-[#f0ede6] pt-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-[#bdbbb2] mb-2">Parked today</div>
+          {parkedTasks.map(task => (
+            <div key={task.id} className="flex items-center justify-between px-3 py-2 rounded-lg mb-1 bg-[#f9f8f5]">
+              <span className="text-[13px] text-[#bdbbb2] truncate flex-1">{task.title}</span>
+              <button
+                onClick={() => onUnpark && onUnpark(task.id)}
+                className="flex-none ml-3 text-[11px] font-medium px-2 py-0.5 rounded-full text-[#888780] hover:bg-[#e7e5df] hover:text-[#2c2c2a]"
+              >
+                Add back
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Summary + launch */}
       <div className="flex items-center justify-between">
