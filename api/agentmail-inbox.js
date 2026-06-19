@@ -3,8 +3,6 @@ import { getFirestore } from 'firebase-admin/firestore'
 import { timingSafeEqual } from 'crypto'
 import { Webhook } from 'svix'
 import Anthropic from '@anthropic-ai/sdk'
-import { z } from 'zod'
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 
 // AgentMail email -> B Things task.
 // Brian forwards any email to the AgentMail inbox; AgentMail (via Svix) fires a
@@ -69,21 +67,6 @@ function extractEmail(payload) {
   return { from, subject, body }
 }
 
-const InterpretationSchema = z.object({
-  title: z
-    .string()
-    .describe(
-      'A short, actionable task title interpreting what Brian needs to DO about this email. ' +
-      'NOT a literal copy of the subject line. Example: an email from Joe covering several ' +
-      'points about speaking at Columbia becomes "Reply to email from Joe re: Columbia speaking".'
-    ),
-  notes: z
-    .string()
-    .describe(
-      'A condensed 2-3 line summary of the core of the email — the gist only, not the full body.'
-    ),
-})
-
 async function interpretEmail({ from, subject, body }) {
   const client = new Anthropic() // uses ANTHROPIC_API_KEY
   const model = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5'
@@ -93,13 +76,17 @@ async function interpretEmail({ from, subject, body }) {
   const truncated = body.length > MAX_BODY
   const bodyForModel = truncated ? body.slice(0, MAX_BODY) + '\n\n[...email truncated...]' : body
 
-  const response = await client.messages.parse({
+  const response = await client.messages.create({
     model,
     max_tokens: 1024,
     system:
       'You turn a forwarded email into a single task for Brian\'s personal task manager. ' +
-      'The title must be an interpretation of the action Brian should take, phrased as a task — ' +
-      'not a verbatim subject line. Keep notes to 2-3 lines capturing only the essential point.',
+      'Respond with ONLY a JSON object (no markdown, no prose) of the exact shape ' +
+      '{"title": string, "notes": string}. ' +
+      'title = an interpretation of the action Brian should take, phrased as a task — ' +
+      'NOT a verbatim subject line. Example: an email from Joe about speaking at Columbia ' +
+      'becomes "Reply to email from Joe re: Columbia speaking". ' +
+      'notes = a condensed 2-3 line summary of the core of the email, the gist only.',
     messages: [
       {
         role: 'user',
@@ -109,10 +96,12 @@ async function interpretEmail({ from, subject, body }) {
           `Body:\n${bodyForModel}`,
       },
     ],
-    output_config: { format: zodOutputFormat(InterpretationSchema) },
   })
 
-  return response.parsed_output
+  const text = response.content.find((b) => b.type === 'text')?.text || ''
+  const cleaned = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+  const parsed = JSON.parse(cleaned)
+  return { title: parsed.title, notes: parsed.notes }
 }
 
 export default async function handler(req, res) {
