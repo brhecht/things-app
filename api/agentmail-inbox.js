@@ -53,6 +53,12 @@ function htmlToText(html) {
     .trim()
 }
 
+// Pull the bare email address out of a "Display Name <email>" or "email" string
+function senderEmail(from) {
+  const m = String(from).match(/<([^>]+)>/)
+  return (m ? m[1] : String(from)).trim().toLowerCase()
+}
+
 // AgentMail message.received event: fields live under payload.message.*
 function extractEmail(payload) {
   const m = payload?.message || {}
@@ -164,6 +170,17 @@ export default async function handler(req, res) {
 
     if (!subject && !body) {
       return res.status(200).json({ ok: true, skipped: 'empty email' })
+    }
+
+    // Sender allowlist (since we accept unauthenticated forwards, restrict who can
+    // create tasks). Comma-separated emails in ALLOWED_SENDERS; if unset, allow all.
+    const allowed = (process.env.ALLOWED_SENDERS || '')
+      .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+    if (allowed.length) {
+      const sender = senderEmail(from)
+      if (!allowed.includes(sender)) {
+        return res.status(200).json({ ok: true, skipped: 'sender not allowed', sender })
+      }
     }
 
     // Interpret with Claude; fall back to subject-as-title if the model call fails
