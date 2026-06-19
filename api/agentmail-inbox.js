@@ -151,9 +151,12 @@ export default async function handler(req, res) {
       }
     }
 
-    // Only act on genuine inbound messages; ack everything else so Svix stops retrying.
+    // Act on inbound messages. Forwarded mail usually fails SPF/DKIM (forwarding
+    // breaks the original signatures), so AgentMail labels it "unauthenticated" —
+    // we accept that variant too. Spam/blocked variants are ignored.
     const eventType = payload?.event_type || ''
-    if (eventType && eventType !== 'message.received') {
+    const ACCEPTED = ['message.received', 'message.received.unauthenticated']
+    if (eventType && !ACCEPTED.includes(eventType)) {
       return res.status(200).json({ ok: true, skipped: eventType })
     }
 
