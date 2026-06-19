@@ -125,17 +125,16 @@ export default async function handler(req, res) {
       }
     }
 
-    // Read the raw body so we can verify the Svix signature before trusting it.
-    let raw = ''
+    // Read the raw body FIRST — before touching req.body, which triggers Vercel's
+    // lazy body parse and consumes the stream (leaving Svix unable to verify).
+    let raw = await readRawBody(req)
     let payload = {}
-    if (req.body && typeof req.body === 'object') {
-      // A body parser ran upstream despite our config — fall back to it (Svix can't
-      // verify a re-serialized body, so we rely on the URL token in that case).
+    if (raw) {
+      try { payload = JSON.parse(raw) } catch { payload = {} }
+    } else if (req.body && typeof req.body === 'object') {
+      // Raw stream unavailable (runtime pre-parsed) — Svix can't verify a
+      // re-serialized body, so we rely on the URL token gate in that case.
       payload = req.body
-      raw = ''
-    } else {
-      raw = await readRawBody(req)
-      payload = raw ? JSON.parse(raw) : {}
     }
 
     // --- Auth gate 2: Svix signature (AgentMail delivers webhooks via Svix) ---
