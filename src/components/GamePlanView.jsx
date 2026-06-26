@@ -33,8 +33,20 @@ const BS = {
 const TIER          = { deep: 0, medium: 1, low: 2 }
 const BREAK_DUE_MIN = 90
 
+// Intelligent break insertion (research-backed defaults — see daily-game-plan/
+// BREAK-SCHEDULING-SPEC.md). Suggest a break once contiguous work since the last
+// reset crosses the threshold for the most-intense tier worked in that run.
+const BREAK_RULES = {
+  deep:   { thresholdMs: 90  * 60000, breakMin: 20 }, // ultradian/BRAC + deep-work reset
+  medium: { thresholdMs: 90  * 60000, breakMin: 12 },
+  low:    { thresholdMs: 120 * 60000, breakMin: 10 }, // micro-break is enough for admin
+}
+const DEEP_DAY_CAP_MIN = 210 // ~3.5h soft daily ceiling on deep work (Ericsson)
+
 // Normalize any stored focus value (incl. legacy 'unknown'/null) to a valid tier.
 function bsNorm(v) { return TIER[v] !== undefined ? v : 'medium' }
+// Most-intense of two tiers (deep > medium > low); nulls ignored.
+function moreIntenseTier(a, b) { if (!a) return b; if (!b) return a; return TIER[a] <= TIER[b] ? a : b }
 
 // ── Smart Sort (pure) ────────────────────────────────────────────
 // Star-first, then energy-aware (Deep earliest), then a best-effort pass that
@@ -109,7 +121,7 @@ function fmtDur(ms) {
 }
 
 const DEFAULT_GP = () => ({
-  order: [], done: {}, estimates: {}, brainspace: {}, suppressed: [],
+  order: [], done: {}, estimates: {}, brainspace: {}, suppressed: [], dismissedBreaks: [],
   focusId: null, focusStart: null, planStart: null,
   onBreak: false, breakStart: null, lastBreak: Date.now(),
 })
@@ -125,8 +137,11 @@ function buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, cursorMs) {
   const items = []
   let cursor  = cursorMs
   let calIdx  = 0
+  let workSinceBreak = 0   // ms of contiguous task work since the last break/meeting
+  let runTier = null       // most-intense focus tier worked in the current run
 
-  // Insert cal events that have already started (or just started) before cursor
+  // Insert cal events that have already started (or just started) before cursor.
+  // A meeting counts as a break → reset the work accumulator.
   function drainPastCal() {
     while (calIdx < sortedCal.length) {
       const cal = sortedCal[calIdx]
@@ -135,6 +150,7 @@ function buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, cursorMs) {
       if (cal.endMs > cursor) {
         items.push({ type: 'calblock', event: cal, start: cal.startMs, end: cal.endMs, ongoing: true })
         cursor = cal.endMs
+        workSinceBreak = 0; runTier = null
       }
     }
   }
@@ -153,12 +169,29 @@ function buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, cursorMs) {
     }
   }
 
+  // Suggest a break at a task boundary once the run crosses the most-intense
+  // tier's threshold. Skipped breaks (by next-task id) are remembered. A break is
+  // suppressed if a meeting is imminent (the meeting already serves as the rest).
+  function maybeInsertBreak(nextTaskId) {
+    if (!runTier) return
+    if ((gp.dismissedBreaks || []).includes(nextTaskId)) { workSinceBreak = 0; runTier = null; return }
+    const rule = BREAK_RULES[runTier]
+    if (workSinceBreak < rule.thresholdMs) return
+    const nextCal = calIdx < sortedCal.length ? sortedCal[calIdx] : null
+    if (nextCal && nextCal.startMs - cursor <= 20 * 60000) return // meeting imminent = the break
+    items.push({ type: 'break', start: cursor, end: cursor + rule.breakMin * 60000, durationMin: rule.breakMin, tier: runTier, nextTaskId })
+    cursor += rule.breakMin * 60000
+    workSinceBreak = 0; runTier = null
+  }
+
   for (const task of activeTasks) {
     if (gp.done[task.id]) {
       items.push({ type: 'task', task, start: null, end: null, done: true })
       continue
     }
 
+    maybeInsertBreak(task.id)
+    const taskTier = bsNorm(gp.brainspace[task.id])
     const estMs   = (gp.estimates[task.id] || 30) * 60000
     let remaining = estMs
     // Build this task's timeline pieces IN ORDER (segments interleaved with the
@@ -192,6 +225,7 @@ function buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, cursorMs) {
     for (const p of pieces) {
       if (p.kind === 'cal') {
         items.push({ type: 'calblock', event: p.event, start: p.start, end: p.end, ongoing: false })
+        workSinceBreak = 0; runTier = null // meeting = reset
       } else {
         segIdx++
         if (segCount === 1) {
@@ -199,6 +233,8 @@ function buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, cursorMs) {
         } else {
           items.push({ type: 'task-split', task, part: segIdx, totalParts: segCount, start: p.start, end: p.end, partMs: p.partMs, estMs, done: false })
         }
+        workSinceBreak += (p.end - p.start)
+        runTier = moreIntenseTier(runTier, taskTier)
       }
     }
   }
@@ -337,6 +373,10 @@ export default function GamePlanView() {
   const activeTasks  = orderedTasks
   const unknownTasks = []
   const planTasks    = orderedTasks
+  // Soft daily deep-work ceiling (Ericsson ~4h). Sum remaining deep estimates.
+  const deepPlannedMin = planTasks
+    .filter(t => !gp.done[t.id] && bsNorm(gp.brainspace[t.id]) === 'deep')
+    .reduce((s, t) => s + (gp.estimates[t.id] || 30), 0)
 
   function parkTask(taskId) {
     update({ suppressed: [...suppressed, taskId] })
@@ -430,6 +470,12 @@ export default function GamePlanView() {
   function toggleStar(task) {
     if (task.starred) updateTask(task.id, { starred: false })
     else updateTask(task.id, { starred: true, sortWeight: Date.now(), priority: 'high' })
+  }
+
+  // Dismiss a suggested break (remembered by the id of the task it precedes).
+  function dismissBreak(nextTaskId) {
+    if (!nextTaskId) return
+    update({ dismissedBreaks: [...(gp.dismissedBreaks || []), nextTaskId] })
   }
 
   function saveEstimate(taskId, val) {
@@ -744,6 +790,13 @@ export default function GamePlanView() {
            `${sinceBreakMin} min since your last break`}
         </div>
 
+        {/* Deep-work daily ceiling (~3.5h) — Ericsson's quality limit */}
+        {deepPlannedMin > DEEP_DAY_CAP_MIN && (
+          <div className="text-[12px] rounded-lg px-3 py-1.5 mb-3 border bg-[#faeeda] border-[#fac775] text-[#854f0b]">
+            ~{(deepPlannedMin / 60).toFixed(1)}h of deep work still planned — past the ~4h/day quality ceiling. Consider pushing a deep task to tomorrow.
+          </div>
+        )}
+
         {/* Now card — meeting in progress takes priority */}
         {currentMeeting ? (
           <div className="bg-[#fff7ed] border border-[#fed7aa] rounded-xl px-4 py-3 mb-4">
@@ -848,6 +901,19 @@ export default function GamePlanView() {
             }
             if (item.type === 'calblock') {
               return <CalBlockRow key={`cal-${item.event.id}-${idx}`} event={item.event} ongoing={item.ongoing} />
+            }
+            if (item.type === 'break') {
+              return (
+                <div key={`break-${item.nextTaskId}-${idx}`} className="flex items-center gap-2.5 px-3 py-2 rounded-lg mb-1.5 border border-dashed border-[#9fe1cb] bg-[#eaf6f0] select-none">
+                  <span className="flex-none text-[15px] leading-none">🌿</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12.5px] font-medium text-[#0f6e56]">Suggested break · {item.durationMin} min</div>
+                    <div className="text-[11px] text-[#3f7d6a] truncate">Step away — walk, screen off · {fmt(item.start)}–{fmt(item.end)}</div>
+                  </div>
+                  <button onClick={startBreak} className="flex-none text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#1d9e75] text-white active:scale-[.98]">Start break</button>
+                  <button onClick={() => dismissBreak(item.nextTaskId)} className="flex-none text-[11px] font-medium px-2 py-1 rounded-full text-[#5f8c7d] hover:bg-[#dcefe7]">Skip</button>
+                </div>
+              )
             }
             if (item.type === 'unknown') {
               const bs = gp.brainspace[item.task.id] || 'unknown'
