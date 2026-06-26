@@ -3,6 +3,7 @@ import { collection, doc, getDoc, getDocs, orderBy, query, limit, setDoc } from 
 import { db, auth } from '../firebase'
 import useStore from '../store'
 import TaskModal from './TaskModal'
+import { isOverdueHard } from '../dateLane'
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null } }
@@ -372,9 +373,11 @@ export default function GamePlanView() {
     ...todayTasks.filter(t => !savedOrder.includes(t.id)),
   ]
   // Every today-task is part of the plan now — nothing gets ejected to a "?" pile.
-  const activeTasks  = orderedTasks
+  // Overdue hard deadlines pin to the top of the plan (red row styling below).
+  const _odHard = orderedTasks.filter(t => isOverdueHard(t))
+  const activeTasks  = _odHard.length ? [..._odHard, ...orderedTasks.filter(t => !isOverdueHard(t))] : orderedTasks
   const unknownTasks = []
-  const planTasks    = orderedTasks
+  const planTasks    = activeTasks
   // Soft daily deep-work ceiling (Ericsson ~4h). Sum remaining deep estimates.
   const deepPlannedMin = planTasks
     .filter(t => !gp.done[t.id] && bsNorm(gp.brainspace[t.id]) === 'deep')
@@ -611,6 +614,7 @@ export default function GamePlanView() {
         className={`group cursor-pointer relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
           isDragging ? 'opacity-40 border-[#378add]' :
           isDone     ? 'bg-[#f4f2ec] border-transparent' :
+          isOverdueHard(task) ? 'bg-red-50 border-l-[3px] border-l-red-500 border-[#f0d6d6]' :
           isNow      ? 'bg-[#fbfcfe] border-l-[3px] border-l-[#378add] border-[#e7e5df]' :
           'bg-white border-[#e7e5df]'
         }`}
