@@ -1,39 +1,56 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import useStore from '../store'
-import { getUserByEmail } from '../users'
+import { isOverdueHard, fmtDate, presetDate } from '../dateLane'
+
+const MENU_ITEM = 'w-full text-left px-3 py-1.5 hover:bg-gray-50 text-gray-700 transition-colors'
 
 export default function TaskCard({ task, onClick }) {
-  const { updateTask, deleteTask } = useStore()
+  const { updateTask, deleteTask, snoozeTask } = useStore()
   const user = useStore((s) => s.user)
   const [showTooltip, setShowTooltip] = useState(false)
+  const [snoozeOpen, setSnoozeOpen] = useState(false)
+  const [picking, setPicking] = useState(false)
+  const menuRef = useRef(null)
 
   // Unread message indicator
   const meta = task._msgMeta
   const emailKey = user?.email?.replace(/\./g, '_')
   const hasUnread = meta?.lastAt && emailKey && !meta.readBy?.[emailKey]
 
-  const handleCheck = (e) => {
-    e.stopPropagation()
-    updateTask(task.id, { completed: true })
-  }
+  // Close the snooze menu on outside click
+  useEffect(() => {
+    if (!snoozeOpen) return
+    const h = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) { setSnoozeOpen(false); setPicking(false) } }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [snoozeOpen])
+
+  const handleCheck = (e) => { e.stopPropagation(); updateTask(task.id, { completed: true }) }
 
   const handleStar = (e) => {
     e.stopPropagation()
-    if (!task.starred) {
-      updateTask(task.id, { starred: true, sortWeight: Date.now() })
-    } else {
-      updateTask(task.id, { starred: false })
-    }
+    if (!task.starred) updateTask(task.id, { starred: true, sortWeight: Date.now() })
+    else updateTask(task.id, { starred: false })
   }
 
-  const handleDelete = (e) => {
+  const handleDelete = (e) => { e.stopPropagation(); deleteTask(task.id) }
+
+  // Snooze presets. "Do today" / "Someday" / "Clear date" un-schedule (no date).
+  const doSnooze = (e, kind) => {
     e.stopPropagation()
-    deleteTask(task.id)
+    if (kind === 'today')      { updateTask(task.id, { bucket: 'today',   dueDate: null }); setSnoozeOpen(false); return }
+    if (kind === 'someday')    { updateTask(task.id, { bucket: 'someday', dueDate: null }); setSnoozeOpen(false); return }
+    if (kind === 'unschedule') { updateTask(task.id, { bucket: 'anytime', dueDate: null }); setSnoozeOpen(false); return }
+    const d = presetDate(kind)
+    if (d) { snoozeTask(task.id, d); setSnoozeOpen(false) }
   }
 
   const isUnassigned = !task.projectId || task.projectId === 'unassigned'
-  // Amber stripe flags unassigned (un-triaged) captures so they stand out for triage.
-  const borderClass = isUnassigned ? 'border-l-[3px] border-l-amber-400' : ''
+  const overdue = isOverdueHard(task)
+  const borderClass = overdue
+    ? 'border-l-[3px] border-l-red-500'
+    : (isUnassigned ? 'border-l-[3px] border-l-amber-400' : '')
+  const snoozes = task.snoozeCount || 0
 
   return (
     <div
@@ -43,7 +60,7 @@ export default function TaskCard({ task, onClick }) {
       onClick={onClick}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
-      className={`group relative bg-white rounded-xl border border-gray-100 p-3 cursor-pointer hover:shadow-md hover:border-gray-200 transition-all select-none shadow-sm ${borderClass}`}
+      className={`group relative bg-white rounded-xl border border-gray-100 p-3 cursor-pointer hover:shadow-md hover:border-gray-200 transition-all select-none shadow-sm ${borderClass} ${overdue ? 'bg-red-50/40' : ''}`}
     >
       {/* Tooltip */}
       {showTooltip && (
@@ -62,6 +79,57 @@ export default function TaskCard({ task, onClick }) {
 
         {/* Title */}
         <p className="flex-1 text-sm text-gray-800 font-medium leading-snug">{task.title}</p>
+
+        {/* Due date chip */}
+        {task.dueDate && (
+          <span className={`flex-shrink-0 text-[11px] font-medium ${overdue ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
+            {overdue ? '⚠ ' : ''}{fmtDate(task.dueDate)}
+          </span>
+        )}
+
+        {/* Snooze count — the anti-treadmill stare */}
+        {snoozes >= 2 && (
+          <span className="flex-shrink-0 text-[10px] font-bold text-orange-500" title={`Snoozed ${snoozes}×`}>
+            💤{snoozes}
+          </span>
+        )}
+
+        {/* Snooze */}
+        <div className="relative flex-shrink-0" ref={menuRef}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setSnoozeOpen((o) => !o) }}
+            className={`text-base leading-none transition-colors ${snoozeOpen ? 'text-indigo-500' : 'text-gray-300 hover:text-indigo-500'}`}
+            title="Snooze"
+          >
+            💤
+          </button>
+          {snoozeOpen && (
+            <div
+              className="absolute right-0 top-6 z-50 w-40 bg-white rounded-lg shadow-xl border border-gray-100 py-1 text-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button onClick={(e) => doSnooze(e, 'today')} className={MENU_ITEM}>Do today</button>
+              <button onClick={(e) => doSnooze(e, 'tomorrow')} className={MENU_ITEM}>Tomorrow</button>
+              <button onClick={(e) => doSnooze(e, 'weekend')} className={MENU_ITEM}>This weekend</button>
+              <button onClick={(e) => doSnooze(e, 'nextweek')} className={MENU_ITEM}>Next week</button>
+              {picking ? (
+                <input
+                  type="date"
+                  autoFocus
+                  onChange={(e) => { if (e.target.value) { snoozeTask(task.id, e.target.value); setSnoozeOpen(false); setPicking(false) } }}
+                  className="w-full text-xs text-gray-700 border-t border-gray-100 px-3 py-1.5 outline-none"
+                />
+              ) : (
+                <button onClick={(e) => { e.stopPropagation(); setPicking(true) }} className={MENU_ITEM}>Pick a date…</button>
+              )}
+              <div className="border-t border-gray-100 my-1" />
+              <button onClick={(e) => doSnooze(e, 'someday')} className={`${MENU_ITEM} text-gray-500`}>Someday</button>
+              {task.dueDate && (
+                <button onClick={(e) => doSnooze(e, 'unschedule')} className={`${MENU_ITEM} text-gray-500`}>Clear date</button>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Star */}
         <button

@@ -6,6 +6,7 @@ const BUCKETS = [
   { id: 'inbox',    label: 'Inbox',     accent: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' },
   { id: 'today',    label: 'Today',     accent: 'text-blue-600',   bg: 'bg-blue-50',   border: 'border-blue-200' },
   { id: 'soon',     label: 'This Week', accent: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200' },
+  { id: 'scheduled',label: 'Scheduled', accent: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200' },
   { id: 'anytime',  label: 'Anytime',   accent: 'text-sky-600',    bg: 'bg-sky-50',    border: 'border-sky-200' },
   { id: 'someday',  label: 'Someday',   accent: 'text-gray-500',   bg: 'bg-gray-50',   border: 'border-gray-200' },
   { id: 'waiting',  label: 'Wait / Delegate', accent: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
@@ -32,7 +33,7 @@ const PROJECT_ORDER = [
   'from-nico', 'infra', 'unassigned',
 ]
 
-const BUCKET_ORDER = ['inbox', 'today', 'soon', 'anytime', 'someday', 'waiting']
+const BUCKET_ORDER = ['inbox', 'today', 'soon', 'scheduled', 'anytime', 'someday', 'waiting']
 
 function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects, scrollRef }) {
   const startX = useRef(0)

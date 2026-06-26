@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import useStore from '../store'
 import NoteThread from './NoteThread'
+import { desiredBucket } from '../dateLane'
 
 const BUCKETS = [
   { value: 'inbox',    label: 'Inbox' },
   { value: 'today',    label: 'Today' },
   { value: 'soon',     label: 'This Week' },
+  { value: 'scheduled', label: 'Scheduled' },
   { value: 'anytime',  label: 'Anytime' },
   { value: 'someday',  label: 'Someday' },
   { value: 'waiting',  label: 'Wait / Delegate' },
@@ -21,6 +23,7 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
   const [projectId, setProjectId] = useState(task.projectId)
   const [bucket,    setBucket]    = useState(task.bucket)
   const [dueDate,   setDueDate]   = useState(task.dueDate || '')
+  const [dateType,  setDateType]  = useState(task.dateType || 'soft')
   const [starred,   setStarred]   = useState(task.starred || false)
   const [completed, setCompleted] = useState(task.completed || false)
   const [assignedToNico, setAssignedToNico] = useState(task.assignedToNico || false)
@@ -100,17 +103,8 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
     if (title.trim()) {
       // Auto-set bucket based on due date
       let finalBucket = bucket
-      if (dueDate) {
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const due = new Date(dueDate + 'T00:00:00')
-        const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24))
-
-        if (diffDays <= 0) finalBucket = 'today'
-        else if (diffDays <= 7) finalBucket = 'soon'
-        else finalBucket = 'anytime'
-      }
-      const updates = { title: title.trim(), notes, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, starred, completed, assignedToNico }
+      if (dueDate) finalBucket = desiredBucket({ dueDate, dateType }) || finalBucket
+      const updates = { title: title.trim(), notes, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, dateType: dueDate ? dateType : null, starred, completed, assignedToNico }
       if (assignedToNico && !task.assignedToNico) updates.assignedAt = Date.now()
       // Match TaskCard behavior: starring sets sortWeight for ordering
       if (starred && !task.starred) updates.sortWeight = Date.now()
@@ -270,6 +264,27 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
             </div>
           </div>
 
+          {/* Soft plan vs hard deadline (only meaningful with a date) */}
+          {dueDate && (
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-gray-400 w-20 flex-shrink-0">Type</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setDateType('soft')}
+                  className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${dateType === 'soft' ? 'bg-sky-600 text-white border-sky-600' : 'text-gray-500 border-gray-200 hover:border-gray-400 bg-white'}`}
+                >
+                  Plan
+                </button>
+                <button
+                  onClick={() => setDateType('hard')}
+                  className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${dateType === 'hard' ? 'bg-red-600 text-white border-red-600' : 'text-gray-500 border-gray-200 hover:border-gray-400 bg-white'}`}
+                >
+                  Deadline
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Tags */}
           <div className="flex items-start gap-3">
             <label className="text-sm text-gray-400 w-20 flex-shrink-0 mt-2">Tags</label>
@@ -392,16 +407,8 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
                 onClick={() => {
                   if (title.trim()) {
                     let finalBucket = bucket
-                    if (dueDate) {
-                      const today = new Date()
-                      today.setHours(0, 0, 0, 0)
-                      const due = new Date(dueDate + 'T00:00:00')
-                      const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24))
-                      if (diffDays <= 0) finalBucket = 'today'
-                      else if (diffDays <= 7) finalBucket = 'soon'
-                      else finalBucket = 'anytime'
-                    }
-                    const updates = { title: title.trim(), notes, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, starred, completed: false }
+                    if (dueDate) finalBucket = desiredBucket({ dueDate, dateType }) || finalBucket
+                    const updates = { title: title.trim(), notes, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, dateType: dueDate ? dateType : null, starred, completed: false }
                     if (starred && !task.starred) updates.sortWeight = Date.now()
                     updateTask(task.id, updates)
                   }

@@ -2,11 +2,13 @@ import { useState, useRef } from 'react'
 import useStore from '../store'
 import TaskCard from './TaskCard'
 import TaskModal from './TaskModal'
+import { isOverdueHard } from '../dateLane'
 
 const BUCKETS = [
   { id: 'inbox',    label: 'Inbox',     accent: 'text-orange-600', border: 'border-orange-200', dropBg: 'bg-orange-50', count: 'bg-orange-100 text-orange-700', defaultFlex: 3, minW: 200 },
   { id: 'today',    label: 'Today',     accent: 'text-blue-600',   border: 'border-blue-200',   dropBg: 'bg-blue-50',   count: 'bg-blue-100 text-blue-700',     defaultFlex: 3, minW: 200 },
   { id: 'soon',     label: 'This Week', accent: 'text-violet-600', border: 'border-violet-200', dropBg: 'bg-violet-50', count: 'bg-violet-100 text-violet-700', defaultFlex: 3, minW: 200 },
+  { id: 'scheduled',label: 'Scheduled', accent: 'text-indigo-600', border: 'border-indigo-200', dropBg: 'bg-indigo-50', count: 'bg-indigo-100 text-indigo-700', defaultFlex: 2, minW: 160 },
   { id: 'anytime',  label: 'Anytime',   accent: 'text-sky-600',    border: 'border-sky-200',    dropBg: 'bg-sky-50',    count: 'bg-sky-100 text-sky-700',       defaultFlex: 2, minW: 160 },
   { id: 'someday',  label: 'Someday',   accent: 'text-gray-500',   border: 'border-gray-200',   dropBg: 'bg-gray-100',  count: 'bg-gray-100 text-gray-500',     defaultFlex: 1, minW: 100 },
   { id: 'waiting',  label: 'Wait / Delegate', accent: 'text-amber-600', border: 'border-amber-200', dropBg: 'bg-amber-50', count: 'bg-amber-100 text-amber-700', defaultFlex: 2, minW: 160 },
@@ -86,9 +88,16 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
     }
   }
 
+  // Overdue hard deadlines pin to the TOP of Today, red, across all projects.
+  const overdueTasks = bucket.id === 'today'
+    ? tasks.filter((t) => isOverdueHard(t)).sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))
+    : []
+  const overdueIds = new Set(overdueTasks.map((t) => t.id))
+  const baseTasks = overdueIds.size ? tasks.filter((t) => !overdueIds.has(t.id)) : tasks
+
   // Unassigned (no project OR the "unassigned" project = fresh captures). Render these at the
   // TOP of every column, newest first, so new captures jump out instead of hiding at the bottom.
-  const unassigned = tasks
+  const unassigned = baseTasks
     .filter((t) => !t.projectId || t.projectId === 'unassigned')
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
 
@@ -98,7 +107,7 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
     .filter((proj) => proj.id !== 'unassigned')
     .map((proj) => ({
       proj,
-      tasks: tasks
+      tasks: baseTasks
         .filter((t) => t.projectId === proj.id)
         .sort((a, b) => {
           // Starred always on top
@@ -130,6 +139,15 @@ function Column({ bucket, tasks, projects, onTaskClick }) {
 
       {/* Scrollable task area */}
       <div className="flex-1 min-h-[120px] rounded-2xl p-2 -m-2 space-y-4">
+        {/* Overdue deadlines — pinned to the top of Today, red */}
+        {overdueTasks.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-red-500 px-1">Overdue</div>
+            {overdueTasks.map((task) => (
+              <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
+            ))}
+          </div>
+        )}
         {/* Unassigned tasks (no project — typically inbox items) */}
         {unassigned.length > 0 && (
           <div className="space-y-2">
@@ -303,7 +321,7 @@ export default function KanbanBoard({ filters }) {
   const { tasks, projects, selectedProjectId } = useStore()
   const [selectedTask, setSelectedTask] = useState(null)
   const [colWidths, setColWidths] = useState({
-    inbox: 260, today: 260, soon: 260, anytime: 260, someday: 260, waiting: 260,
+    inbox: 260, today: 260, soon: 260, scheduled: 260, anytime: 260, someday: 260, waiting: 260,
   })
 
   // Base visibility: project filter + not completed
@@ -336,6 +354,7 @@ export default function KanbanBoard({ filters }) {
           {BUCKETS.filter((bucket) => {
             // Hide inbox column when it has no tasks
             if (bucket.id === 'inbox' && visibleTasks.filter((t) => bucketOf(t) === 'inbox').length === 0) return false
+            if (bucket.id === 'scheduled' && visibleTasks.filter((t) => bucketOf(t) === 'scheduled').length === 0) return false
             return true
           }).map((bucket, i, arr) => (
             <div key={bucket.id} data-col-wrapper className="flex" style={{ flex: colWidths[bucket.id] ? `0 0 ${colWidths[bucket.id]}px` : `${bucket.defaultFlex} 1 0%`, minWidth: bucket.minW }}>

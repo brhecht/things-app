@@ -18,6 +18,7 @@ import {
   setMigrationFlag,
   registerViewer,
 } from './firebase'
+import { desiredBucket } from './dateLane'
 
 // ── Sharing config ──────────────────────────────────────────────
 const OWNER_EMAIL = 'brhnyc1970@gmail.com'
@@ -77,6 +78,29 @@ async function maybeApplyLaneModelV2(userId, tasks) {
   } catch (e) {
     _laneModelV2Checked = false // allow retry next session on failure
   }
+}
+
+// ── Date surfacing pass (the digital tickler) ────────────────────
+// Escalate dated cards toward Today as their day nears: a snoozed (soft) card
+// sleeps in 'scheduled' and surfaces in Today on its date; a hard deadline gets
+// runway (This Week at <=7 days, Today at <=2 or overdue). Escalate-only (never
+// demotes a card you manually pulled forward) and write-on-change. Runs once per
+// session load — no write loops, no daily cron.
+let _datePromoDone = false
+function applyDatePromotion(userId, tasks) {
+  if (_datePromoDone) return
+  _datePromoDone = true
+  const RANK = { today: 0, soon: 1, inbox: 1, anytime: 2, scheduled: 3 }
+  const updates = []
+  tasks.forEach((t) => {
+    if (t.completed || !t.dueDate) return
+    if (t.bucket === 'waiting' || t.bucket === 'someday') return // respect blocked / parked
+    const want = desiredBucket(t)
+    if (want && want !== t.bucket && (RANK[want] ?? 9) < (RANK[t.bucket] ?? 9)) {
+      updates.push({ ...t, bucket: want })
+    }
+  })
+  if (updates.length) batchUpsertTasks(userId, updates)
 }
 
 // Fallback display order for projects that don't have a sortOrder yet
@@ -313,6 +337,12 @@ const useStore = create((set, get) => ({
         if (onProdHost && !get().isViewer) maybeApplyLaneModelV2(userId, tasks)
       }
 
+      // ── Date surfacing: bring snoozed/dated cards forward as their day nears ──
+      {
+        const onProdHost = typeof window !== 'undefined' && window.location.hostname === 'things-app-gamma.vercel.app'
+        if (onProdHost && !get().isViewer) applyDatePromotion(userId, tasks)
+      }
+
       set({ _rawTasks: tasks, tasks: visibleTasks })
     })
 
@@ -438,6 +468,19 @@ const useStore = create((set, get) => ({
       get()._pushUndo('update', { ...existing }, 'move')
       upsertTask(dataUid, { ...existing, bucket })
     }
+  },
+
+  // Snooze: defer a card to a date. It sleeps in 'scheduled' and surfaces in
+  // Today on that day. Soft by default; snoozeCount drives the anti-treadmill badge.
+  snoozeTask: (id, dateStr) => {
+    const { user, dataUid, tasks } = get()
+    if (!user || !dataUid) return
+    const t = tasks.find((x) => x.id === id)
+    if (!t) return
+    get()._pushUndo('update', { ...t }, 'snooze')
+    const updated = { ...t, dueDate: dateStr, dateType: 'soft', bucket: 'scheduled', snoozeCount: (t.snoozeCount || 0) + 1 }
+    set({ tasks: tasks.map((x) => (x.id === id ? updated : x)) })
+    upsertTask(dataUid, updated)
   },
 
   reorderProjects: (fromIndex, toIndex) => {
