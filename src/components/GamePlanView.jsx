@@ -141,61 +141,65 @@ function buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, cursorMs) {
 
   drainPastCal()
 
+  const SLIVER_MS = 2 * 60000 // drop sub-2-min leftover segments (rounding noise)
+
+  // Drain calblocks at/just-before cursor into a target list (handles back-to-back meetings)
+  function drainCalInto(target) {
+    while (calIdx < sortedCal.length) {
+      const c = sortedCal[calIdx]
+      if (c.startMs > cursor) break
+      calIdx++
+      if (c.endMs > cursor) { target.push({ kind: 'cal', event: c, start: c.startMs, end: c.endMs }); cursor = c.endMs }
+    }
+  }
+
   for (const task of activeTasks) {
     if (gp.done[task.id]) {
       items.push({ type: 'task', task, start: null, end: null, done: true })
       continue
     }
 
-    const estMs    = (gp.estimates[task.id] || 30) * 60000
-    let remaining  = estMs
-    let partStart  = cursor
-    const splits   = [] // collect split segments first, then annotate with totalParts
+    const estMs   = (gp.estimates[task.id] || 30) * 60000
+    let remaining = estMs
+    // Build this task's timeline pieces IN ORDER (segments interleaved with the
+    // meetings that interrupt them) so a split renders part-before / meeting / part-after.
+    const pieces  = [] // { kind: 'seg', start, end, partMs } | { kind: 'cal', event, start, end }
 
     while (remaining > 0) {
       const nextCal = calIdx < sortedCal.length ? sortedCal[calIdx] : null
-
       if (nextCal && nextCal.startMs < cursor + remaining) {
         if (nextCal.startMs <= cursor) {
-          // Cal block starts at or before current cursor — insert it, advance cursor
-          items.push({ type: 'calblock', event: nextCal, start: nextCal.startMs, end: nextCal.endMs, ongoing: false })
-          cursor = Math.max(cursor, nextCal.endMs)
-          calIdx++
-          drainPastCal()
+          drainCalInto(pieces)
         } else {
-          // Cal block interrupts this task — create a split segment
           const part1Ms = nextCal.startMs - cursor
-          splits.push({ start: cursor, end: nextCal.startMs, partMs: part1Ms })
+          if (part1Ms >= SLIVER_MS) pieces.push({ kind: 'seg', start: cursor, end: nextCal.startMs, partMs: part1Ms })
           remaining -= part1Ms
           cursor     = nextCal.startMs
-
-          items.push({ type: 'calblock', event: nextCal, start: nextCal.startMs, end: nextCal.endMs, ongoing: false })
-          cursor = nextCal.endMs
-          calIdx++
-          drainPastCal()
+          drainCalInto(pieces)
         }
       } else {
-        // No overlap — assign remaining time as one chunk
-        splits.push({ start: cursor, end: cursor + remaining, partMs: remaining })
-        cursor    += remaining
-        remaining  = 0
+        const segSoFar = pieces.filter(p => p.kind === 'seg').length
+        if (remaining >= SLIVER_MS || segSoFar === 0) {
+          pieces.push({ kind: 'seg', start: cursor, end: cursor + remaining, partMs: remaining })
+        }
+        cursor   += remaining
+        remaining = 0
       }
     }
 
-    if (splits.length === 1) {
-      // No actual split — single task row
-      items.push({ type: 'task', task, start: splits[0].start, end: splits[0].end, done: false })
-    } else {
-      // Multi-segment split
-      splits.forEach((seg, i) => {
-        items.push({
-          type: 'task-split', task,
-          part: i + 1, totalParts: splits.length,
-          start: seg.start, end: seg.end,
-          partMs: seg.partMs, estMs,
-          done: false,
-        })
-      })
+    const segCount = pieces.filter(p => p.kind === 'seg').length
+    let segIdx = 0
+    for (const p of pieces) {
+      if (p.kind === 'cal') {
+        items.push({ type: 'calblock', event: p.event, start: p.start, end: p.end, ongoing: false })
+      } else {
+        segIdx++
+        if (segCount === 1) {
+          items.push({ type: 'task', task, start: p.start, end: p.end, done: false })
+        } else {
+          items.push({ type: 'task-split', task, part: segIdx, totalParts: segCount, start: p.start, end: p.end, partMs: p.partMs, estMs, done: false })
+        }
+      }
     }
   }
 
