@@ -420,6 +420,14 @@ export default function GamePlanView() {
     update({ brainspace: { ...gp.brainspace, [taskId]: BS[cur].next } })
   }
 
+  // Toggle the board-level star (priority signal). Mirrors TaskCard so the
+  // star stays consistent everywhere. Unstarring may leave it among starred
+  // rows until the next Smart Sort re-groups (intentional — drags persist).
+  function toggleStar(task) {
+    if (task.starred) updateTask(task.id, { starred: false })
+    else updateTask(task.id, { starred: true, sortWeight: Date.now(), priority: 'high' })
+  }
+
   function saveEstimate(taskId, val) {
     const v = parseInt(val, 10)
     if (v > 0) update({ estimates: { ...gp.estimates, [taskId]: v } })
@@ -539,9 +547,16 @@ export default function GamePlanView() {
         {/* Title */}
         <div className="flex-1 min-w-0">
           <div className={`text-[14px] flex items-center gap-1.5 flex-wrap ${isDone ? 'line-through text-[#888780]' : 'text-[#2c2c2a]'}`}>
-            {task.starred && <span className="flex-none text-yellow-400 leading-none" title="Starred — must-do">★</span>}
+            <button
+              onClick={e => { e.stopPropagation(); toggleStar(task) }}
+              draggable={false}
+              className={`flex-none text-[17px] leading-none px-1 -mx-0.5 -my-1 transition-colors ${task.starred ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}
+              title={task.starred ? 'Starred — click to unstar' : 'Click to star (must-do)'}
+            >
+              {task.starred ? '★' : '☆'}
+            </button>
             <span className="truncate">{task.title}</span>
-            {splitLabel && <span className="text-[10px] text-[#aaa9a1] flex-none">{splitLabel}</span>}
+            {splitLabel && <span className="text-[10.5px] font-bold text-[#185fa5] bg-[#e6f1fb] px-1.5 py-0.5 rounded-full flex-none tabular-nums">{splitLabel}</span>}
             {isNow && (
               <span className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-full bg-[#e6f1fb] text-[#185fa5] flex-none">
                 {gp.focusId === task.id ? 'focusing' : 'now'}
@@ -675,6 +690,7 @@ export default function GamePlanView() {
             parkedTasks={parkedTasks}
             onPark={parkTask}
             onUnpark={unparkTask}
+            onToggleStar={toggleStar}
             onLaunch={() => {
               // Merge inherited values that haven't been manually set, then
               // auto-run Smart Sort ONCE so Run opens on a reasonable agenda.
@@ -880,7 +896,7 @@ export default function GamePlanView() {
 }
 
 // ── SetupTable ────────────────────────────────────────────────────
-function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inheritedEst = {}, calEvents = [], onLaunch, onTaskClick, parkedTasks = [], onPark, onUnpark }) {
+function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inheritedEst = {}, calEvents = [], onLaunch, onTaskClick, parkedTasks = [], onPark, onUnpark, onToggleStar }) {
   const [estInputs, setEstInputs] = useState({})
 
   function setBs(taskId, bs) {
@@ -950,8 +966,14 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
           return (
             <div key={task.id} className={`group grid grid-cols-[1fr_auto_auto_auto] gap-0 items-center ${!isLast ? 'border-b border-[#f0ede6]' : ''}`}>
               <div className="px-4 py-3 cursor-pointer" onClick={() => onTaskClick && onTaskClick(task)}>
-                <div className="text-[13.5px] text-[#2c2c2a] font-medium leading-snug truncate flex items-center gap-1.5">
-                  {task.starred && <span className="flex-none text-yellow-400 leading-none" title="Starred — must-do">★</span>}
+                <div className="text-[13.5px] text-[#2c2c2a] font-medium leading-snug flex items-center gap-1.5">
+                  <button
+                    onClick={e => { e.stopPropagation(); onToggleStar && onToggleStar(task) }}
+                    className={`flex-none text-[17px] leading-none px-1 -mx-0.5 -my-1 transition-colors ${task.starred ? 'text-yellow-400 hover:text-yellow-500' : 'text-gray-300 hover:text-yellow-400'}`}
+                    title={task.starred ? 'Starred — click to unstar' : 'Click to star (must-do)'}
+                  >
+                    {task.starred ? '★' : '☆'}
+                  </button>
                   <span className="truncate">{task.title}</span>
                 </div>
                 {task.notes && <div className="text-[11.5px] text-[#aaa9a1] truncate mt-0.5">{task.notes}</div>}
