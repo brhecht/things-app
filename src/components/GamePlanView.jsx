@@ -223,7 +223,7 @@ export default function GamePlanView() {
   const [editingId,   setEditingId]   = useState(null)
   const [askMsg,      setAskMsg]      = useState('')
   const [draggingId,  setDraggingId]  = useState(null)
-  const [dropTargetId,setDropTargetId]= useState(null)
+  const [dropTarget,  setDropTarget]  = useState(null) // { id, side: 'above'|'below' }
   const [gpTab,       setGpTab]       = useState(() => localStorage.getItem('btGpTab') || 'setup')
   const setGpTabPersist = (t) => { localStorage.setItem('btGpTab', t); setGpTab(t) }
   const [calEvents,   setCalEvents]   = useState([])
@@ -427,26 +427,50 @@ export default function GamePlanView() {
   }
 
   // ── Drag handlers ────────────────────────────────────────────
+  // Model: the list does NOT reshuffle while you drag. We track a drop target
+  // { id, side } from the cursor's position over a row (top half = above,
+  // bottom half = below), draw a single line on that side, and reorder ONCE on
+  // drop. State is always cleared on drop/end so no row gets stuck "dragging".
   function onDragStart(e, id) {
     wasDraggingRef.current = true
     setDraggingId(id)
     e.dataTransfer.effectAllowed = 'move'
+    try { e.dataTransfer.setData('text/plain', id) } catch (_) {} // Firefox needs payload
   }
 
-  function onDragOver(e, targetId) {
-    e.preventDefault()
+  function onDragOverRow(e, targetId) {
+    e.preventDefault() // required so onDrop fires
     if (!draggingId || draggingId === targetId) return
-    const base = planTasks.map(t => t.id)
-    const from = base.indexOf(draggingId), to = base.indexOf(targetId)
-    if (from === -1 || to === -1) return
-    base.splice(from, 1); base.splice(to, 0, draggingId)
-    setGp(prev => ({ ...prev, order: base }))
+    const rect = e.currentTarget.getBoundingClientRect()
+    const side = (e.clientY - rect.top) < rect.height / 2 ? 'above' : 'below'
+    setDropTarget(prev => (prev && prev.id === targetId && prev.side === side) ? prev : { id: targetId, side })
   }
 
-  function onDragEnd() {
-    persist({ order: gp.order })
+  function onDropRow(e, targetId) {
+    e.preventDefault()
+    commitReorder(targetId, dropTarget?.side || 'above')
+  }
+
+  function commitReorder(targetId, side) {
+    if (draggingId && targetId && draggingId !== targetId) {
+      const base = planTasks.map(t => t.id)
+      const from = base.indexOf(draggingId)
+      if (from !== -1) {
+        base.splice(from, 1)
+        let to = base.indexOf(targetId)
+        if (to === -1) to = base.length
+        else if (side === 'below') to += 1
+        base.splice(to, 0, draggingId)
+        setGp(prev => ({ ...prev, order: base }))
+        persist({ order: base })
+      }
+    }
+    endDrag()
+  }
+
+  function endDrag() {
     setDraggingId(null)
-    setDropTargetId(null)
+    setDropTarget(null)
     setTimeout(() => { wasDraggingRef.current = false }, 0)
   }
 
@@ -479,10 +503,9 @@ export default function GamePlanView() {
       <div
         draggable
         onDragStart={e => onDragStart(e, task.id)}
-        onDragOver={e => onDragOver(e, task.id)}
-        onDragEnter={() => draggingId && draggingId !== task.id && setDropTargetId(task.id)}
-        onDragLeave={() => setDropTargetId(null)}
-        onDragEnd={onDragEnd}
+        onDragOver={e => onDragOverRow(e, task.id)}
+        onDrop={e => onDropRow(e, task.id)}
+        onDragEnd={endDrag}
         onClick={() => { if (!wasDraggingRef.current) setSelectedTask(task) }}
         className={`group cursor-pointer relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
           isDragging ? 'opacity-40 border-[#378add]' :
@@ -491,8 +514,8 @@ export default function GamePlanView() {
           'bg-white border-[#e7e5df]'
         }`}
       >
-        {dropTargetId === task.id && (
-          <div className="absolute -top-[3px] left-0 right-0 h-[3px] rounded-full bg-[#378add] pointer-events-none z-10" />
+        {dropTarget?.id === task.id && draggingId !== task.id && (
+          <div className={`absolute left-0 right-0 h-[3px] rounded-full bg-[#378add] pointer-events-none z-10 ${dropTarget.side === 'below' ? '-bottom-[3px]' : '-top-[3px]'}`} />
         )}
         {/* Grip */}
         <div className="cursor-grab flex-none text-[#bdbbb2] text-lg leading-none">⠿</div>
