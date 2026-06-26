@@ -89,8 +89,12 @@ export default function TaskCard({ task, onClick }) {
 
         {/* Snooze count — the anti-treadmill stare */}
         {snoozes >= 2 && (
-          <span className="flex-shrink-0 text-[10px] font-bold text-orange-500" title={`Snoozed ${snoozes}×`}>
-            💤{snoozes}
+          <span className={`flex-shrink-0 inline-flex items-center gap-0.5 text-[10px] font-semibold ${snoozes >= 4 ? 'text-orange-500' : 'text-gray-400'}`} title={`Snoozed ${snoozes}×`}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-2.5 h-2.5">
+              <circle cx="12" cy="13" r="8" />
+              <path d="M12 9v4l2 2" />
+            </svg>
+            {snoozes}
           </span>
         )}
 
@@ -98,10 +102,17 @@ export default function TaskCard({ task, onClick }) {
         <div className="relative flex-shrink-0" ref={menuRef}>
           <button
             onClick={(e) => { e.stopPropagation(); setSnoozeOpen((o) => !o) }}
-            className={`text-base leading-none transition-colors ${snoozeOpen ? 'text-indigo-500' : 'text-gray-300 hover:text-indigo-500'}`}
+            className={`flex-shrink-0 transition-colors ${snoozeOpen ? 'text-gray-600' : 'text-gray-400 hover:text-gray-600'}`}
             title="Snooze"
           >
-            💤
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+              <circle cx="12" cy="13" r="8" />
+              <path d="M12 9v4l2 2" />
+              <path d="M5 3 2 6" />
+              <path d="m22 6-3-3" />
+              <path d="M6.38 18.7 4 21" />
+              <path d="M17.64 18.67 20 21" />
+            </svg>
           </button>
           {snoozeOpen && (
             <div
