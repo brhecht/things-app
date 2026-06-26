@@ -720,7 +720,7 @@ export default function GamePlanView() {
 
   // ── Render ───────────────────────────────────────────────────
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto bg-[#faf9f7] px-6 py-5">
+    <div ref={scrollRef} onDragOver={onListDragOver} onDrop={onListDrop} className="h-full overflow-y-auto bg-[#faf9f7] px-6 py-5">
       <div className="max-w-2xl mx-auto">
 
         {/* Header */}
@@ -924,8 +924,10 @@ export default function GamePlanView() {
         </div>
         <div className="text-[12px] text-[#888780] mb-3">{doneCount} of {totalCount} done · {pct}%</div>
 
-        {/* Render plan rows */}
-        <div onDragOver={onListDragOver} onDrop={onListDrop}>
+        {/* Render plan rows — drag/drop is handled at the scroll-container level
+            so the space above the first task (and below the last) are valid drop
+            zones, letting you drop at the very top/bottom without overshooting. */}
+        <div>
           {renderPlan.map((item, idx) => {
             if (item.type === 'task') {
               return <div key={item.task.id}>{TaskRow({ task: item.task, start: item.start, end: item.end, done: item.done })}</div>
