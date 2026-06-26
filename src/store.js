@@ -472,13 +472,14 @@ const useStore = create((set, get) => ({
 
   // Snooze: defer a card to a date. It sleeps in 'scheduled' and surfaces in
   // Today on that day. Soft by default; snoozeCount drives the anti-treadmill badge.
-  snoozeTask: (id, dateStr) => {
+  snoozeTask: (id, dateStr, dateType = 'soft') => {
     const { user, dataUid, tasks } = get()
     if (!user || !dataUid) return
     const t = tasks.find((x) => x.id === id)
     if (!t) return
     get()._pushUndo('update', { ...t }, 'snooze')
-    const updated = { ...t, dueDate: dateStr, dateType: 'soft', bucket: 'scheduled', snoozeCount: (t.snoozeCount || 0) + 1 }
+    const bucket = desiredBucket({ dueDate: dateStr, dateType }) || 'scheduled'
+    const updated = { ...t, dueDate: dateStr, dateType, bucket, snoozeCount: (t.snoozeCount || 0) + 1 }
     set({ tasks: tasks.map((x) => (x.id === id ? updated : x)) })
     upsertTask(dataUid, updated)
   },

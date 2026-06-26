@@ -10,6 +10,7 @@ export default function TaskCard({ task, onClick }) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   const [picking, setPicking] = useState(false)
+  const [pendingHard, setPendingHard] = useState(null) // a date awaiting deadline-vs-plan choice
   const menuRef = useRef(null)
 
   // Unread message indicator
@@ -17,10 +18,12 @@ export default function TaskCard({ task, onClick }) {
   const emailKey = user?.email?.replace(/\./g, '_')
   const hasUnread = meta?.lastAt && emailKey && !meta.readBy?.[emailKey]
 
+  const closeMenu = () => { setSnoozeOpen(false); setPicking(false); setPendingHard(null) }
+
   // Close the snooze menu on outside click
   useEffect(() => {
     if (!snoozeOpen) return
-    const h = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) { setSnoozeOpen(false); setPicking(false) } }
+    const h = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) closeMenu() }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [snoozeOpen])
@@ -35,14 +38,20 @@ export default function TaskCard({ task, onClick }) {
 
   const handleDelete = (e) => { e.stopPropagation(); deleteTask(task.id) }
 
-  // Snooze presets. "Do today" / "Someday" / "Clear date" un-schedule (no date).
+  // Snoozing a HARD deadline asks first (reschedule the deadline, or drop to a plan).
+  // Soft / undated cards snooze straight to a soft date.
+  const applySnooze = (d) => {
+    if (!d) return
+    if (task.dateType === 'hard') { setPendingHard(d); setPicking(false) }
+    else { snoozeTask(task.id, d); closeMenu() }
+  }
+
   const doSnooze = (e, kind) => {
     e.stopPropagation()
-    if (kind === 'today')      { updateTask(task.id, { bucket: 'today',   dueDate: null }); setSnoozeOpen(false); return }
-    if (kind === 'someday')    { updateTask(task.id, { bucket: 'someday', dueDate: null }); setSnoozeOpen(false); return }
-    if (kind === 'unschedule') { updateTask(task.id, { bucket: 'anytime', dueDate: null }); setSnoozeOpen(false); return }
-    const d = presetDate(kind)
-    if (d) { snoozeTask(task.id, d); setSnoozeOpen(false) }
+    if (kind === 'today')      { updateTask(task.id, { bucket: 'today',   dueDate: null, dateType: null }); closeMenu(); return }
+    if (kind === 'someday')    { updateTask(task.id, { bucket: 'someday', dueDate: null, dateType: null }); closeMenu(); return }
+    if (kind === 'unschedule') { updateTask(task.id, { bucket: 'anytime', dueDate: null, dateType: null }); closeMenu(); return }
+    applySnooze(presetDate(kind))
   }
 
   const isUnassigned = !task.projectId || task.projectId === 'unassigned'
@@ -51,6 +60,17 @@ export default function TaskCard({ task, onClick }) {
     ? 'border-l-[3px] border-l-red-500'
     : (isUnassigned ? 'border-l-[3px] border-l-amber-400' : '')
   const snoozes = task.snoozeCount || 0
+
+  const clockSvg = (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l2 2" />
+      <path d="M5 3 2 6" />
+      <path d="m22 6-3-3" />
+      <path d="M6.38 18.7 4 21" />
+      <path d="M17.64 18.67 20 21" />
+    </svg>
+  )
 
   return (
     <div
@@ -101,42 +121,48 @@ export default function TaskCard({ task, onClick }) {
         {/* Snooze */}
         <div className="relative flex-shrink-0" ref={menuRef}>
           <button
-            onClick={(e) => { e.stopPropagation(); setSnoozeOpen((o) => !o) }}
+            onClick={(e) => { e.stopPropagation(); snoozeOpen ? closeMenu() : setSnoozeOpen(true) }}
             className={`flex-shrink-0 transition-colors ${snoozeOpen ? 'text-gray-600' : 'text-gray-400 hover:text-gray-600'}`}
             title="Snooze"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-              <circle cx="12" cy="13" r="8" />
-              <path d="M12 9v4l2 2" />
-              <path d="M5 3 2 6" />
-              <path d="m22 6-3-3" />
-              <path d="M6.38 18.7 4 21" />
-              <path d="M17.64 18.67 20 21" />
-            </svg>
+            {clockSvg}
           </button>
           {snoozeOpen && (
             <div
-              className="absolute right-0 top-6 z-50 w-40 bg-white rounded-lg shadow-xl border border-gray-100 py-1 text-sm"
+              className="absolute right-0 top-6 z-50 w-44 bg-white rounded-lg shadow-xl border border-gray-100 py-1 text-sm"
               onClick={(e) => e.stopPropagation()}
             >
-              <button onClick={(e) => doSnooze(e, 'today')} className={MENU_ITEM}>Do today</button>
-              <button onClick={(e) => doSnooze(e, 'tomorrow')} className={MENU_ITEM}>Tomorrow</button>
-              <button onClick={(e) => doSnooze(e, 'weekend')} className={MENU_ITEM}>This weekend</button>
-              <button onClick={(e) => doSnooze(e, 'nextweek')} className={MENU_ITEM}>Next week</button>
-              {picking ? (
-                <input
-                  type="date"
-                  autoFocus
-                  onChange={(e) => { if (e.target.value) { snoozeTask(task.id, e.target.value); setSnoozeOpen(false); setPicking(false) } }}
-                  className="w-full text-xs text-gray-700 border-t border-gray-100 px-3 py-1.5 outline-none"
-                />
+              {pendingHard ? (
+                <div className="px-3 py-2">
+                  <div className="text-[11px] text-gray-500 mb-2 leading-snug">
+                    This is a deadline. Move the deadline to {fmtDate(pendingHard)}, or drop it to a plan?
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); snoozeTask(task.id, pendingHard, 'hard'); closeMenu() }} className={`${MENU_ITEM} rounded-md`}>Move deadline</button>
+                  <button onClick={(e) => { e.stopPropagation(); snoozeTask(task.id, pendingHard, 'soft'); closeMenu() }} className={`${MENU_ITEM} rounded-md text-gray-500`}>Make it a plan</button>
+                  <button onClick={(e) => { e.stopPropagation(); setPendingHard(null) }} className={`${MENU_ITEM} rounded-md text-gray-400`}>Cancel</button>
+                </div>
               ) : (
-                <button onClick={(e) => { e.stopPropagation(); setPicking(true) }} className={MENU_ITEM}>Pick a date…</button>
-              )}
-              <div className="border-t border-gray-100 my-1" />
-              <button onClick={(e) => doSnooze(e, 'someday')} className={`${MENU_ITEM} text-gray-500`}>Someday</button>
-              {task.dueDate && (
-                <button onClick={(e) => doSnooze(e, 'unschedule')} className={`${MENU_ITEM} text-gray-500`}>Clear date</button>
+                <>
+                  <button onClick={(e) => doSnooze(e, 'today')} className={MENU_ITEM}>Do today</button>
+                  <button onClick={(e) => doSnooze(e, 'tomorrow')} className={MENU_ITEM}>Tomorrow</button>
+                  <button onClick={(e) => doSnooze(e, 'weekend')} className={MENU_ITEM}>This weekend</button>
+                  <button onClick={(e) => doSnooze(e, 'nextweek')} className={MENU_ITEM}>Next week</button>
+                  {picking ? (
+                    <input
+                      type="date"
+                      autoFocus
+                      onChange={(e) => { if (e.target.value) applySnooze(e.target.value) }}
+                      className="w-full text-xs text-gray-700 border-t border-gray-100 px-3 py-1.5 outline-none"
+                    />
+                  ) : (
+                    <button onClick={(e) => { e.stopPropagation(); setPicking(true) }} className={MENU_ITEM}>Pick a date…</button>
+                  )}
+                  <div className="border-t border-gray-100 my-1" />
+                  <button onClick={(e) => doSnooze(e, 'someday')} className={`${MENU_ITEM} text-gray-500`}>Someday</button>
+                  {task.dueDate && (
+                    <button onClick={(e) => doSnooze(e, 'unschedule')} className={`${MENU_ITEM} text-gray-500`}>Clear date</button>
+                  )}
+                </>
               )}
             </div>
           )}
