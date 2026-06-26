@@ -388,7 +388,12 @@ export default function GamePlanView() {
   }
 
   // ── Build render plan ────────────────────────────────────────
-  const planCursor  = gp.planStart || now
+  // Anchor the schedule to the LIVE clock so windows never go stale: the first
+  // remaining block always starts at "now". planStart is only honored if it's in
+  // the future (never projects into the past). This is what makes finishing early
+  // pull the rest earlier AND running late push the rest later, automatically —
+  // no Smart Sort needed. (Smart Sort only changes order, not the clock.)
+  const planCursor  = Math.max(gp.planStart || now, now)
   let renderPlan = []
   try {
     renderPlan = buildRenderPlan(activeTasks, unknownTasks, gp, calEvents, planCursor)
@@ -457,7 +462,7 @@ export default function GamePlanView() {
 
   function smartSort() {
     update({
-      order: computeSmartOrder(orderedTasks, gp.brainspace, gp.estimates, gp.done, gp.planStart || now, calEvents),
+      order: computeSmartOrder(orderedTasks, gp.brainspace, gp.estimates, gp.done, planCursor, calEvents),
     })
   }
 
