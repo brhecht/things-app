@@ -273,6 +273,8 @@ export default function GamePlanView() {
   const [inheritedEst,setInheritedEst]= useState({})
   const [selectedTask, setSelectedTask] = useState(null)
   const wasDraggingRef = useRef(false)
+  const scrollRef      = useRef(null)  // the Run/Setup scroll container (for drag auto-scroll)
+  const autoScrollRef  = useRef(null)  // requestAnimationFrame id for edge auto-scroll
   const dateKey = todayKey()
 
   // 1-second ticker
@@ -496,17 +498,30 @@ export default function GamePlanView() {
     try { e.dataTransfer.setData('text/plain', id) } catch (_) {} // Firefox needs payload
   }
 
-  function onDragOverRow(e, targetId) {
+  // Drop handling lives on the LIST CONTAINER (not each row) so meetings, break
+  // blocks, and the empty space below the last task are all valid drop zones —
+  // dragging to the very bottom now works instead of snapping back. The drop
+  // target is computed against the task rows' midpoints (other rows are transparent).
+  function onListDragOver(e) {
+    if (!draggingId) return
     e.preventDefault() // required so onDrop fires
-    if (!draggingId || draggingId === targetId) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const side = (e.clientY - rect.top) < rect.height / 2 ? 'above' : 'below'
-    setDropTarget(prev => (prev && prev.id === targetId && prev.side === side) ? prev : { id: targetId, side })
+    const rows = [...e.currentTarget.querySelectorAll('[data-task-id]')]
+    let targetId = null, side = 'below'
+    for (const el of rows) {
+      const id = el.getAttribute('data-task-id')
+      if (id === draggingId) continue
+      const r = el.getBoundingClientRect()
+      if (e.clientY < r.top + r.height / 2) { targetId = id; side = 'above'; break }
+      targetId = id; side = 'below' // below this row's midpoint — keep as running candidate
+    }
+    if (targetId) setDropTarget(prev => (prev && prev.id === targetId && prev.side === side) ? prev : { id: targetId, side })
+    autoScrollEdge(e.clientY)
   }
 
-  function onDropRow(e, targetId) {
+  function onListDrop(e) {
     e.preventDefault()
-    commitReorder(targetId, dropTarget?.side || 'above')
+    if (dropTarget) commitReorder(dropTarget.id, dropTarget.side)
+    else endDrag()
   }
 
   function commitReorder(targetId, side) {
@@ -526,7 +541,31 @@ export default function GamePlanView() {
     endDrag()
   }
 
+  // Auto-scroll the list when the cursor nears the top/bottom edge during a drag.
+  function autoScrollEdge(clientY) {
+    const sc = scrollRef.current
+    if (!sc) return
+    const r = sc.getBoundingClientRect()
+    const EDGE = 80, SPEED = 16
+    let dir = 0
+    if (clientY < r.top + EDGE) dir = -1
+    else if (clientY > r.bottom - EDGE) dir = 1
+    if (!dir) { stopAutoScroll(); return }
+    if (autoScrollRef.current) return // already scrolling
+    const step = () => {
+      const el = scrollRef.current
+      if (!el || !autoScrollRef.current) return
+      el.scrollTop += dir * SPEED
+      autoScrollRef.current = requestAnimationFrame(step)
+    }
+    autoScrollRef.current = requestAnimationFrame(step)
+  }
+  function stopAutoScroll() {
+    if (autoScrollRef.current) { cancelAnimationFrame(autoScrollRef.current); autoScrollRef.current = null }
+  }
+
   function endDrag() {
+    stopAutoScroll()
     setDraggingId(null)
     setDropTarget(null)
     setTimeout(() => { wasDraggingRef.current = false }, 0)
@@ -560,9 +599,8 @@ export default function GamePlanView() {
     return (
       <div
         draggable
+        data-task-id={task.id}
         onDragStart={e => onDragStart(e, task.id)}
-        onDragOver={e => onDragOverRow(e, task.id)}
-        onDrop={e => onDropRow(e, task.id)}
         onDragEnd={endDrag}
         onClick={() => { if (!wasDraggingRef.current) setSelectedTask(task) }}
         className={`group cursor-pointer relative flex items-center gap-2 px-3 py-2.5 rounded-lg mb-1.5 border select-none transition-opacity ${
@@ -682,7 +720,7 @@ export default function GamePlanView() {
 
   // ── Render ───────────────────────────────────────────────────
   return (
-    <div className="h-full overflow-y-auto bg-[#faf9f7] px-6 py-5">
+    <div ref={scrollRef} className="h-full overflow-y-auto bg-[#faf9f7] px-6 py-5">
       <div className="max-w-2xl mx-auto">
 
         {/* Header */}
@@ -887,7 +925,7 @@ export default function GamePlanView() {
         <div className="text-[12px] text-[#888780] mb-3">{doneCount} of {totalCount} done · {pct}%</div>
 
         {/* Render plan rows */}
-        <div>
+        <div onDragOver={onListDragOver} onDrop={onListDrop}>
           {renderPlan.map((item, idx) => {
             if (item.type === 'task') {
               return <div key={item.task.id}>{TaskRow({ task: item.task, start: item.start, end: item.end, done: item.done })}</div>
