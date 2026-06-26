@@ -20,14 +20,65 @@ class ErrorBoundary extends Component {
 }
 
 // ── Constants ────────────────────────────────────────────────────
+// Clean 3-state focus ring: Low → Medium → Deep → (wrap) Low.
+// 'unknown'/'?' was retired (Jun 26 2026) — it ejected cards from the plan and
+// caused the "alternates between Low and Medium" cycle bug. Legacy tasks stored
+// as 'unknown' fall back to Medium via bsNorm().
 const BS = {
-  deep:    { label: 'Deep',   cls: 'bg-blue-100 text-blue-700',   next: 'medium'  },
-  medium:  { label: 'Medium', cls: 'bg-gray-100 text-gray-600',   next: 'low'     },
-  low:     { label: 'Low',    cls: 'bg-green-100 text-green-700', next: 'unknown' },
-  unknown: { label: '?',      cls: 'bg-amber-100 text-amber-700', next: 'deep'    },
+  low:    { label: 'Low',    cls: 'bg-green-100 text-green-700', next: 'medium' },
+  medium: { label: 'Medium', cls: 'bg-gray-100 text-gray-600',  next: 'deep'   },
+  deep:   { label: 'Deep',   cls: 'bg-blue-100 text-blue-700',  next: 'low'    },
 }
-const BS_SORT       = { deep: 0, medium: 1, low: 2, unknown: 3 }
+// Lower rank = earlier in the day. Deep is front-loaded to higher-energy hours.
+const TIER          = { deep: 0, medium: 1, low: 2 }
 const BREAK_DUE_MIN = 90
+
+// Normalize any stored focus value (incl. legacy 'unknown'/null) to a valid tier.
+function bsNorm(v) { return TIER[v] !== undefined ? v : 'medium' }
+
+// ── Smart Sort (pure) ────────────────────────────────────────────
+// Star-first, then energy-aware (Deep earliest), then a best-effort pass that
+// avoids stranding a Deep task where the next calendar block would fragment it.
+// Completed tasks stay anchored at the top in their existing order.
+function computeSmartOrder(taskList, bsMap, estMap, doneMap, startCursor, calEvents) {
+  const done   = taskList.filter(t => doneMap[t.id]).map(t => t.id)
+  const undone = taskList.filter(t => !doneMap[t.id])
+  const tierSort = arr => [...arr]
+    .map((t, i) => ({ id: t.id, i, tier: TIER[bsNorm(bsMap[t.id])] }))
+    .sort((a, b) => (a.tier !== b.tier ? a.tier - b.tier : a.i - b.i))
+    .map(x => x.id)
+  const starred   = tierSort(undone.filter(t => t.starred))
+  const unstarred = tierSort(undone.filter(t => !t.starred))
+  const ordered   = defragDeep([...starred, ...unstarred], starred.length, estMap, bsMap, startCursor, calEvents)
+  return [...done, ...ordered]
+}
+
+// Greedy single pass: if a Deep task at the head of its star-group would be split
+// by the next meeting, pull a shorter non-Deep task from the SAME star-group into
+// the gap first (so stars never fall below non-stars). Otherwise order is untouched.
+function defragDeep(ids, starCount, estMap, bsMap, startCursor, calEvents) {
+  if (!calEvents || !calEvents.length) return ids
+  const cal  = [...calEvents].sort((a, b) => a.startMs - b.startMs)
+  const pool = ids.map((id, idx) => ({ id, star: idx < starCount }))
+  const estMs = id => (estMap[id] || 30) * 60000
+  const out  = []
+  let cursor = startCursor, ci = 0
+  while (pool.length) {
+    while (ci < cal.length && cal[ci].endMs <= cursor) ci++
+    const gap  = ci < cal.length ? cal[ci].startMs - cursor : Infinity
+    const head = pool[0]
+    let pick = 0
+    if (bsNorm(bsMap[head.id]) === 'deep' && Number.isFinite(gap) && gap > 0 && estMs(head.id) > gap) {
+      const alt = pool.findIndex(p => p.star === head.star && bsNorm(bsMap[p.id]) !== 'deep' && estMs(p.id) <= gap)
+      if (alt > 0) pick = alt
+    }
+    const [picked] = pool.splice(pick, 1)
+    out.push(picked.id)
+    cursor += estMs(picked.id)
+    while (ci < cal.length && cal[ci].startMs <= cursor) { cursor = Math.max(cursor, cal[ci].endMs); ci++ }
+  }
+  return out
+}
 
 // ── Helpers ──────────────────────────────────────────────────────
 const SLUG_MAP = { 'beehiiv-post': 'Substack Post', 'beehiiv': 'Substack' }
@@ -278,9 +329,10 @@ export default function GamePlanView() {
     ...savedOrder.map(id => todayTasks.find(t => t.id === id)).filter(Boolean),
     ...todayTasks.filter(t => !savedOrder.includes(t.id)),
   ]
-  const activeTasks  = orderedTasks.filter(t => (gp.brainspace[t.id] || 'medium') !== 'unknown')
-  const unknownTasks = orderedTasks.filter(t => (gp.brainspace[t.id] || 'medium') === 'unknown')
-  const planTasks    = [...activeTasks, ...unknownTasks]
+  // Every today-task is part of the plan now — nothing gets ejected to a "?" pile.
+  const activeTasks  = orderedTasks
+  const unknownTasks = []
+  const planTasks    = orderedTasks
 
   function parkTask(taskId) {
     update({ suppressed: [...suppressed, taskId] })
@@ -358,15 +410,13 @@ export default function GamePlanView() {
   }
 
   function smartSort() {
-    const withRank = orderedTasks.map((t, i) => ({
-      id: t.id, rank: BS_SORT[gp.brainspace[t.id] || 'medium'], i,
-    }))
-    withRank.sort((a, b) => a.rank !== b.rank ? a.rank - b.rank : a.i - b.i)
-    update({ order: withRank.map(x => x.id) })
+    update({
+      order: computeSmartOrder(orderedTasks, gp.brainspace, gp.estimates, gp.done, gp.planStart || now, calEvents),
+    })
   }
 
   function cycleBrainspace(taskId) {
-    const cur = gp.brainspace[taskId] || 'medium'
+    const cur = bsNorm(gp.brainspace[taskId])
     update({ brainspace: { ...gp.brainspace, [taskId]: BS[cur].next } })
   }
 
@@ -405,7 +455,7 @@ export default function GamePlanView() {
     if (gp.onBreak) return `On break (${Math.floor((now - gp.breakStart) / 60000)} min) — step away fully, the plan re-flows when you're back.`
     const pctLocal = totalCount ? Math.round(doneCount / totalCount * 100) : 0
     const deepRemaining = activeTasks.filter(t => !gp.done[t.id] && (gp.brainspace[t.id] || 'medium') === 'deep').length
-    const allLowRemaining = activeTasks.filter(t => !gp.done[t.id]).every(t => ['low', 'unknown'].includes(gp.brainspace[t.id] || 'medium'))
+    const allLowRemaining = activeTasks.filter(t => !gp.done[t.id]).every(t => bsNorm(gp.brainspace[t.id]) === 'low')
     const six = new Date(); six.setHours(18, 0, 0, 0)
     if (!currentTask) return "Board's clear — that's a complete day; close the laptop and let it count."
     if (sinceBreakMin >= 90) return `${sinceBreakMin} min since your last break — you're running on fumes; take 10 and you'll close sharper.`
@@ -419,8 +469,7 @@ export default function GamePlanView() {
 
   // ── Render helpers ───────────────────────────────────────────
   function TaskRow({ task, start, end, done: isDone, splitLabel }) {
-    const rawBs = gp.brainspace[task.id] || 'medium'
-    const bs = BS[rawBs] ? rawBs : 'medium'
+    const bs         = bsNorm(gp.brainspace[task.id])
     const bsCfg      = BS[bs]
     const isNow      = !isDone && !gp.onBreak && currentTask?.id === task.id
     const est        = gp.estimates[task.id] || 30
@@ -467,6 +516,7 @@ export default function GamePlanView() {
         {/* Title */}
         <div className="flex-1 min-w-0">
           <div className={`text-[14px] flex items-center gap-1.5 flex-wrap ${isDone ? 'line-through text-[#888780]' : 'text-[#2c2c2a]'}`}>
+            {task.starred && <span className="flex-none text-yellow-400 leading-none" title="Starred — must-do">★</span>}
             <span className="truncate">{task.title}</span>
             {splitLabel && <span className="text-[10px] text-[#aaa9a1] flex-none">{splitLabel}</span>}
             {isNow && (
@@ -603,15 +653,20 @@ export default function GamePlanView() {
             onPark={parkTask}
             onUnpark={unparkTask}
             onLaunch={() => {
-              // Persist inherited values that haven't been manually set
-              const bsPatch = {}, estPatch = {}
+              // Merge inherited values that haven't been manually set, then
+              // auto-run Smart Sort ONCE so Run opens on a reasonable agenda.
+              const mergedBs = { ...gp.brainspace }, mergedEst = { ...gp.estimates }
               todayTasks.forEach(t => {
-                if (!gp.brainspace[t.id] && inheritedBs[t.id])  bsPatch[t.id]  = inheritedBs[t.id]
-                if (!gp.estimates[t.id]  && inheritedEst[t.id]) estPatch[t.id] = inheritedEst[t.id]
+                if (!mergedBs[t.id]  && inheritedBs[t.id])  mergedBs[t.id]  = inheritedBs[t.id]
+                if (!mergedEst[t.id] && inheritedEst[t.id]) mergedEst[t.id] = inheritedEst[t.id]
               })
-              if (Object.keys(bsPatch).length)  update({ brainspace: { ...gp.brainspace, ...bsPatch } })
-              if (Object.keys(estPatch).length)  update({ estimates:  { ...gp.estimates,  ...estPatch } })
-              update({ planStart: Date.now() })
+              const planStart = Date.now()
+              update({
+                brainspace: mergedBs,
+                estimates:  mergedEst,
+                planStart,
+                order: computeSmartOrder(todayTasks, mergedBs, mergedEst, gp.done, planStart, calEvents),
+              })
               setGpTabPersist('run')
             }}
           />
@@ -862,7 +917,7 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
           <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#888780] text-center min-w-[72px]">Min</div>
         </div>
 
-        {todayTasks.map((task, idx) => {
+        {[...todayTasks].sort((a, b) => (b.starred ? 1 : 0) - (a.starred ? 1 : 0)).map((task, idx) => {
           const bs             = gp.brainspace[task.id] || inheritedBs[task.id] || null
           const isInheritedBs  = !gp.brainspace[task.id] && !!inheritedBs[task.id]
           const est            = estInputs[task.id] !== undefined ? estInputs[task.id] : (gp.estimates[task.id] || inheritedEst[task.id] || 30)
@@ -872,7 +927,10 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
           return (
             <div key={task.id} className={`group grid grid-cols-[1fr_auto_auto_auto] gap-0 items-center ${!isLast ? 'border-b border-[#f0ede6]' : ''}`}>
               <div className="px-4 py-3 cursor-pointer" onClick={() => onTaskClick && onTaskClick(task)}>
-                <div className="text-[13.5px] text-[#2c2c2a] font-medium leading-snug truncate">{task.title}</div>
+                <div className="text-[13.5px] text-[#2c2c2a] font-medium leading-snug truncate flex items-center gap-1.5">
+                  {task.starred && <span className="flex-none text-yellow-400 leading-none" title="Starred — must-do">★</span>}
+                  <span className="truncate">{task.title}</span>
+                </div>
                 {task.notes && <div className="text-[11.5px] text-[#aaa9a1] truncate mt-0.5">{task.notes}</div>}
               </div>
 
@@ -881,7 +939,6 @@ function SetupTable({ tasks: todayTasks, gp, update, inheritedBs = {}, inherited
                   { key: 'deep',    label: 'Deep',   active: 'bg-blue-100 text-blue-700 ring-1 ring-blue-300',    inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
                   { key: 'medium',  label: 'Medium', active: 'bg-gray-100 text-gray-700 ring-1 ring-gray-300',    inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
                   { key: 'low',     label: 'Low',    active: 'bg-green-100 text-green-700 ring-1 ring-green-300', inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
-                  { key: 'unknown', label: '?',      active: 'bg-amber-100 text-amber-700 ring-1 ring-amber-300', inactive: 'text-[#888780] hover:bg-[#f0ede6]' },
                 ].map(opt => (
                   <button
                     key={opt.key}
