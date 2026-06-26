@@ -476,7 +476,7 @@ export default function GamePlanView() {
   // rows until the next Smart Sort re-groups (intentional — drags persist).
   function toggleStar(task) {
     if (task.starred) updateTask(task.id, { starred: false })
-    else updateTask(task.id, { starred: true, sortWeight: Date.now(), priority: 'high' })
+    else updateTask(task.id, { starred: true, sortWeight: Date.now() })
   }
 
   // Dismiss a suggested break (remembered by the id of the task it precedes).

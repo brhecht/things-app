@@ -21,10 +21,10 @@ export default function MobileQuickAdd({ defaultBucket = 'inbox' }) {
   const BUCKETS = [
     { id: 'inbox', label: 'Inbox' },
     { id: 'today', label: 'Today' },
-    { id: 'waiting', label: 'Waiting' },
-    { id: 'tomorrow', label: 'Tomorrow' },
     { id: 'soon', label: 'This Week' },
-    { id: 'someday', label: 'Later' },
+    { id: 'anytime', label: 'Anytime' },
+    { id: 'someday', label: 'Someday' },
+    { id: 'waiting', label: 'Waiting' },
   ]
 
   return (

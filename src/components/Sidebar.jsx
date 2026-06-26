@@ -31,8 +31,6 @@ const DOT_COLORS = {
   'unassigned':       'bg-stone-400',
 }
 
-const PRIORITY_LABELS = { high: '🔴 High', medium: '🟡 Medium', low: '🔵 Low' }
-
 function InlineInput({ placeholder, onSubmit, onCancel }) {
   const [value, setValue] = useState('')
   return (
@@ -59,18 +57,6 @@ export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
   const [addingProject, setAddingProject] = useState(false)
   const [dragIdx, setDragIdx] = useState(null)
   const [dropIdx, setDropIdx] = useState(null)
-
-  const hasActiveFilters = filters.starred || filters.priorities.length > 0
-
-  const togglePriority = (p) =>
-    setFilters((prev) => ({
-      ...prev,
-      priorities: prev.priorities.includes(p)
-        ? prev.priorities.filter((x) => x !== p)
-        : [...prev.priorities, p],
-    }))
-
-  const clearFilters = () => setFilters({ starred: false, priorities: [] })
 
   return (
     <aside className={`bg-gray-900 flex flex-col h-full border-r border-gray-800 select-none transition-all duration-200 ${isOpen ? 'w-60' : 'w-10'} flex-shrink-0`}>
@@ -239,39 +225,6 @@ export default function Sidebar({ filters, setFilters, isOpen, onToggle }) {
 
         {/* Spacer */}
         <div className="flex-1" />
-
-        {/* ── Filters ───────────────────────────────────────── */}
-        <div className="border-t border-gray-700 pt-3 mt-2 pb-1">
-          <div className="flex items-center justify-between px-3 mb-2">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Filters</span>
-            {hasActiveFilters && (
-              <button onClick={clearFilters} className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
-                Clear
-              </button>
-            )}
-          </div>
-
-          {/* Priority filters */}
-          {['high', 'medium', 'low'].map((p) => {
-            const active = filters.priorities.includes(p)
-            return (
-              <button
-                key={p}
-                onClick={() => togglePriority(p)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  active ? 'bg-gray-700 text-gray-200' : 'text-gray-400 hover:bg-gray-700/60 hover:text-gray-300'
-                }`}
-              >
-                <span className={`w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
-                  active ? 'bg-blue-500 border-blue-500' : 'border-gray-600'
-                }`}>
-                  {active && <span className="text-white text-[9px] leading-none font-bold">✓</span>}
-                </span>
-                <span className="capitalize">{PRIORITY_LABELS[p]}</span>
-              </button>
-            )
-          })}
-        </div>
       </nav>
       </div>
     </aside>

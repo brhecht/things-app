@@ -55,6 +55,30 @@ async function maybeApplyTnbReorder(userId, projects) {
   }
 }
 
+// ── One-time lane-model v2 (June 2026) ────────────────────────
+// Tomorrow folds into Today (the date engine handles near-term timing); the old
+// "Later" bucket (string 'someday') becomes the new live "Anytime" backlog,
+// which frees 'someday' to mean a genuinely parked "Someday". Prod + owner only,
+// guarded by appConfig/migrations.laneModelV2 so it runs exactly once.
+let _laneModelV2Checked = false
+async function maybeApplyLaneModelV2(userId, tasks) {
+  if (_laneModelV2Checked) return
+  _laneModelV2Checked = true
+  try {
+    const flags = await getMigrationsDoc()
+    if (flags.laneModelV2) return
+    const updates = []
+    tasks.forEach((t) => {
+      if (t.bucket === 'tomorrow') updates.push({ ...t, bucket: 'today' })
+      else if (t.bucket === 'someday') updates.push({ ...t, bucket: 'anytime' })
+    })
+    if (updates.length) await batchUpsertTasks(userId, updates)
+    await setMigrationFlag('laneModelV2')
+  } catch (e) {
+    _laneModelV2Checked = false // allow retry next session on failure
+  }
+}
+
 // Fallback display order for projects that don't have a sortOrder yet
 const LEGACY_ORDER = [
   'hc-admin', 'hc-content', 'hc-revenue', 'portfolio',
@@ -80,16 +104,13 @@ const SEED_PROJECTS = [
 const SEED_TASKS = [
   { id: 't1', title: 'Send HC invoice',              projectId: 'hc-admin',         bucket: 'today',    priority: 'high',   notes: '', tags: [], starred: false, completed: false, createdAt: Date.now() },
   { id: 't2', title: 'Draft newsletter',             projectId: 'hc-content',       bucket: 'today',    priority: 'medium', notes: '', tags: [], starred: false, completed: false, createdAt: Date.now() },
-  { id: 't3', title: 'Review revenue dashboard',     projectId: 'hc-revenue',       bucket: 'tomorrow', priority: 'high',   notes: '', tags: [], starred: false, completed: false, createdAt: Date.now() },
-  { id: 't4', title: 'Update portfolio case study',  projectId: 'portfolio',        bucket: 'tomorrow', priority: null,     notes: '', tags: [], starred: true,  completed: false, createdAt: Date.now() },
+  { id: 't3', title: 'Review revenue dashboard',     projectId: 'hc-revenue',       bucket: 'today',    priority: 'high',   notes: '', tags: [], starred: false, completed: false, createdAt: Date.now() },
+  { id: 't4', title: 'Update portfolio case study',  projectId: 'portfolio',        bucket: 'today',    priority: null,     notes: '', tags: [], starred: true,  completed: false, createdAt: Date.now() },
   { id: 't5', title: 'Review credit card statement', projectId: 'personal-finance', bucket: 'soon',     priority: 'medium', notes: '', tags: [], starred: false, completed: false, createdAt: Date.now() },
-  { id: 't6', title: 'Schedule dentist appointment', projectId: 'life-admin',       bucket: 'soon',     priority: null,     notes: '', tags: [], starred: false, completed: false, createdAt: Date.now() },
+  { id: 't6', title: 'Schedule dentist appointment', projectId: 'life-admin',       bucket: 'anytime',  priority: null,     notes: '', tags: [], starred: false, completed: false, createdAt: Date.now() },
   { id: 't7', title: 'Georgetown alumni event',      projectId: 'georgetown',       bucket: 'someday',  priority: 'low',    notes: '', tags: [], starred: false, completed: false, createdAt: Date.now() },
   { id: 't8', title: 'Plan dinner with Sarah',       projectId: 'friends',          bucket: 'soon',     priority: null,     notes: '', tags: [], starred: false, completed: false, createdAt: Date.now() },
 ]
-
-// ── Morning merge: session guard (runs once per day on first task load) ──────
-let _morningMergeDone = false
 
 const useStore = create((set, get) => ({
   // ── Auth state ────────────────────────────────────────────────
@@ -286,16 +307,10 @@ const useStore = create((set, get) => ({
       const visibleTasks = isViewer
         ? tasks.filter((t) => !t.projectId || visibleProjectIds.has(t.projectId))
         : tasks
-      // ── Morning merge: tomorrow → today on first daily launch ──────────────
-      if (!_morningMergeDone && !get().isViewer) {
-        _morningMergeDone = true
-        const todayKey = new Date().toISOString().slice(0, 10)
-        const lastMerge = typeof localStorage !== 'undefined' && localStorage.getItem('lastMorningMerge')
-        if (lastMerge !== todayKey) {
-          const toMove = tasks.filter(t => t.bucket === 'tomorrow' && !t.completed)
-          toMove.forEach(t => upsertTask(userId, { ...t, bucket: 'today' }))
-          if (typeof localStorage !== 'undefined') localStorage.setItem('lastMorningMerge', todayKey)
-        }
+      // ── One-time lane-model v2 migration (tomorrow→today, Later→Anytime) ──
+      {
+        const onProdHost = typeof window !== 'undefined' && window.location.hostname === 'things-app-gamma.vercel.app'
+        if (onProdHost && !get().isViewer) maybeApplyLaneModelV2(userId, tasks)
       }
 
       set({ _rawTasks: tasks, tasks: visibleTasks })

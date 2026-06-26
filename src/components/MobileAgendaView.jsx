@@ -5,10 +5,10 @@ import TaskModal from './TaskModal'
 const BUCKETS = [
   { id: 'inbox',    label: 'Inbox',     accent: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' },
   { id: 'today',    label: 'Today',     accent: 'text-blue-600',   bg: 'bg-blue-50',   border: 'border-blue-200' },
-  { id: 'waiting',  label: 'Wait / Delegate', accent: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
-  { id: 'tomorrow', label: 'Tomorrow',  accent: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200' },
   { id: 'soon',     label: 'This Week', accent: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200' },
-  { id: 'someday',  label: 'Later',     accent: 'text-gray-500',   bg: 'bg-gray-50',   border: 'border-gray-200' },
+  { id: 'anytime',  label: 'Anytime',   accent: 'text-sky-600',    bg: 'bg-sky-50',    border: 'border-sky-200' },
+  { id: 'someday',  label: 'Someday',   accent: 'text-gray-500',   bg: 'bg-gray-50',   border: 'border-gray-200' },
+  { id: 'waiting',  label: 'Wait / Delegate', accent: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
 ]
 
 const PROJECT_COLORS = {
@@ -32,7 +32,7 @@ const PROJECT_ORDER = [
   'from-nico', 'infra', 'unassigned',
 ]
 
-const BUCKET_ORDER = ['inbox', 'today', 'waiting', 'tomorrow', 'soon', 'someday']
+const BUCKET_ORDER = ['inbox', 'today', 'soon', 'anytime', 'someday', 'waiting']
 
 function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects, scrollRef }) {
   const startX = useRef(0)
@@ -173,9 +173,7 @@ function SwipeableTaskCard({ task, onComplete, onBucketChange, onTap, projects, 
         onTouchEnd={handleTouchEnd}
         onClick={handleClick}
         className={`relative bg-white px-4 py-3.5 flex items-center gap-3 ${
-          task.priority === 'high' ? 'border-l-[3px] border-l-emerald-500' :
-          task.priority === 'medium' ? 'border-l-[3px] border-l-amber-400' :
-          task.priority === 'low' ? 'border-l-[3px] border-l-violet-400' : ''
+          (!task.projectId || task.projectId === 'unassigned') ? 'border-l-[3px] border-l-amber-400' : ''
         }`}
         style={{
           transform: `translateX(${offset}px)`,

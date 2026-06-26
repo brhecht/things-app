@@ -4,12 +4,12 @@ import TaskCard from './TaskCard'
 import TaskModal from './TaskModal'
 
 const BUCKETS = [
-  { id: 'inbox',    label: 'Inbox',    accent: 'text-orange-600', border: 'border-orange-200', dropBg: 'bg-orange-50', count: 'bg-orange-100 text-orange-700', defaultFlex: 3, minW: 200 },
-  { id: 'today',    label: 'Today',    accent: 'text-blue-600',   border: 'border-blue-200',   dropBg: 'bg-blue-50',   count: 'bg-blue-100 text-blue-700',     defaultFlex: 3, minW: 200 },
-  { id: 'waiting',  label: 'Wait / Delegate', accent: 'text-amber-600', border: 'border-amber-200', dropBg: 'bg-amber-50', count: 'bg-amber-100 text-amber-700', defaultFlex: 3, minW: 200 },
-  { id: 'tomorrow', label: 'Tomorrow', accent: 'text-indigo-600', border: 'border-indigo-200', dropBg: 'bg-indigo-50', count: 'bg-indigo-100 text-indigo-700', defaultFlex: 3, minW: 200 },
-  { id: 'soon',     label: 'This Week',     accent: 'text-violet-600', border: 'border-violet-200', dropBg: 'bg-violet-50', count: 'bg-violet-100 text-violet-700', defaultFlex: 1, minW: 100 },
-  { id: 'someday',  label: 'Later',  accent: 'text-gray-500',   border: 'border-gray-200',   dropBg: 'bg-gray-100',  count: 'bg-gray-100 text-gray-500',     defaultFlex: 1, minW: 100 },
+  { id: 'inbox',    label: 'Inbox',     accent: 'text-orange-600', border: 'border-orange-200', dropBg: 'bg-orange-50', count: 'bg-orange-100 text-orange-700', defaultFlex: 3, minW: 200 },
+  { id: 'today',    label: 'Today',     accent: 'text-blue-600',   border: 'border-blue-200',   dropBg: 'bg-blue-50',   count: 'bg-blue-100 text-blue-700',     defaultFlex: 3, minW: 200 },
+  { id: 'soon',     label: 'This Week', accent: 'text-violet-600', border: 'border-violet-200', dropBg: 'bg-violet-50', count: 'bg-violet-100 text-violet-700', defaultFlex: 3, minW: 200 },
+  { id: 'anytime',  label: 'Anytime',   accent: 'text-sky-600',    border: 'border-sky-200',    dropBg: 'bg-sky-50',    count: 'bg-sky-100 text-sky-700',       defaultFlex: 2, minW: 160 },
+  { id: 'someday',  label: 'Someday',   accent: 'text-gray-500',   border: 'border-gray-200',   dropBg: 'bg-gray-100',  count: 'bg-gray-100 text-gray-500',     defaultFlex: 1, minW: 100 },
+  { id: 'waiting',  label: 'Wait / Delegate', accent: 'text-amber-600', border: 'border-amber-200', dropBg: 'bg-amber-50', count: 'bg-amber-100 text-amber-700', defaultFlex: 2, minW: 160 },
 ]
 
 const KNOWN_BUCKETS = new Set(BUCKETS.map((b) => b.id))
@@ -303,7 +303,7 @@ export default function KanbanBoard({ filters }) {
   const { tasks, projects, selectedProjectId } = useStore()
   const [selectedTask, setSelectedTask] = useState(null)
   const [colWidths, setColWidths] = useState({
-    inbox: 260, today: 260, waiting: 260, tomorrow: 260, soon: 260, someday: 260,
+    inbox: 260, today: 260, soon: 260, anytime: 260, someday: 260, waiting: 260,
   })
 
   // Base visibility: project filter + not completed
@@ -313,10 +313,9 @@ export default function KanbanBoard({ filters }) {
 
   // Apply filters
   if (filters.starred) visibleTasks = visibleTasks.filter((t) => t.starred)
-  if (filters.priorities.length > 0) visibleTasks = visibleTasks.filter((t) => filters.priorities.includes(t.priority))
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
-  const hasActiveFilters = filters.starred || filters.priorities.length > 0
+  const hasActiveFilters = filters.starred
 
   return (
     <div className="flex flex-col h-full bg-gray-50">

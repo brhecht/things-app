@@ -17,13 +17,15 @@ function getDb() {
 const BUCKET_MAP = {
   'inbox':     'inbox',
   'today':     'today',
+  'tomorrow':  'today',
   'waiting':   'waiting',
   'delegated': 'waiting',
-  'tomorrow':  'tomorrow',
   'this week': 'soon',
   'week':      'soon',
   'soon':      'soon',
-  'later':     'someday',
+  'anytime':   'anytime',
+  'later':     'anytime',
+  'sometime':  'anytime',
   'someday':   'someday',
 }
 

@@ -2,20 +2,13 @@ import { useState, useEffect, useRef } from 'react'
 import useStore from '../store'
 import NoteThread from './NoteThread'
 
-const PRIORITIES = [
-  { value: null,     label: 'None' },
-  { value: 'high',   label: '🔴 High' },
-  { value: 'medium', label: '🟡 Medium' },
-  { value: 'low',    label: '🔵 Low' },
-]
-
 const BUCKETS = [
   { value: 'inbox',    label: 'Inbox' },
   { value: 'today',    label: 'Today' },
-  { value: 'waiting',  label: 'Wait / Delegate' },
-  { value: 'tomorrow', label: 'Tomorrow' },
   { value: 'soon',     label: 'This Week' },
-  { value: 'someday',  label: 'Later' },
+  { value: 'anytime',  label: 'Anytime' },
+  { value: 'someday',  label: 'Someday' },
+  { value: 'waiting',  label: 'Wait / Delegate' },
 ]
 
 export default function TaskModal({ task, onClose, completedMode = false }) {
@@ -23,7 +16,6 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
 
   const [title,     setTitle]     = useState(task.title)
   const [notes,     setNotes]     = useState(task.notes)
-  const [priority,  setPriority]  = useState(task.priority)
   const [tags,      setTags]      = useState(task.tags)
   const [tagInput,  setTagInput]  = useState('')
   const [projectId, setProjectId] = useState(task.projectId)
@@ -115,11 +107,10 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
         const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24))
 
         if (diffDays <= 0) finalBucket = 'today'
-        else if (diffDays === 1) finalBucket = 'tomorrow'
         else if (diffDays <= 7) finalBucket = 'soon'
-        else finalBucket = 'someday'
+        else finalBucket = 'anytime'
       }
-      const updates = { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, starred, completed, assignedToNico }
+      const updates = { title: title.trim(), notes, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, starred, completed, assignedToNico }
       if (assignedToNico && !task.assignedToNico) updates.assignedAt = Date.now()
       // Match TaskCard behavior: starring sets sortWeight for ordering
       if (starred && !task.starred) updates.sortWeight = Date.now()
@@ -217,8 +208,7 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
               const next = !starred
               setStarred(next)
               if (next) {
-                setPriority('high')
-                updateTask(task.id, { starred: true, sortWeight: Date.now(), priority: 'high' })
+                updateTask(task.id, { starred: true, sortWeight: Date.now() })
               } else {
                 updateTask(task.id, { starred: false })
               }
@@ -277,27 +267,6 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
                   Clear
                 </button>
               )}
-            </div>
-          </div>
-
-          {/* Priority */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-gray-400 w-20 flex-shrink-0">Priority</label>
-            <div className="flex gap-2 flex-wrap">
-              {PRIORITIES.map((opt) => (
-                <button
-                  key={String(opt.value)}
-                  onClick={() => setPriority(opt.value)}
-                  tabIndex={0}
-                  className={`text-xs px-3 py-1.5 rounded-lg border transition-all focus:ring-2 focus:ring-blue-300 focus:ring-offset-1 ${
-                    priority === opt.value
-                      ? 'bg-gray-800 text-white border-gray-800'
-                      : 'text-gray-500 border-gray-200 hover:border-gray-400 bg-white'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
             </div>
           </div>
 
@@ -429,11 +398,10 @@ export default function TaskModal({ task, onClose, completedMode = false }) {
                       const due = new Date(dueDate + 'T00:00:00')
                       const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24))
                       if (diffDays <= 0) finalBucket = 'today'
-                      else if (diffDays === 1) finalBucket = 'tomorrow'
                       else if (diffDays <= 7) finalBucket = 'soon'
-                      else finalBucket = 'someday'
+                      else finalBucket = 'anytime'
                     }
-                    const updates = { title: title.trim(), notes, priority, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, starred, completed: false }
+                    const updates = { title: title.trim(), notes, tags, projectId, bucket: finalBucket, dueDate: dueDate || null, starred, completed: false }
                     if (starred && !task.starred) updates.sortWeight = Date.now()
                     updateTask(task.id, updates)
                   }

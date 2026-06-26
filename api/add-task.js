@@ -25,12 +25,15 @@ const PROJECT_MAP = {
   'misc':              'misc',
 }
 
-// Timing words → bucket.
+// Timing words → bucket. Lane model v2: "tomorrow" folds into Today; "later/
+// sometime/whenever/anytime" → the live Anytime backlog; "someday/one day/
+// eventually" → the parked Someday lane.
 const TIMING = [
   ['this\\s*week', 'soon'],
-  ['tomorrow', 'tomorrow'],
+  ['tomorrow', 'today'],
   ['today', 'today'],
-  ['some\\s*day|later', 'someday'],
+  ['some\\s*day|one\\s*day|eventually', 'someday'],
+  ['later|sometime|whenever|anytime', 'anytime'],
   ['waiting|delegate', 'waiting'],
 ]
 

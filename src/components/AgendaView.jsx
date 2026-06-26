@@ -5,10 +5,10 @@ import TaskModal from './TaskModal'
 const BUCKETS = [
   { id: 'inbox',    label: 'Inbox',     accent: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' },
   { id: 'today',    label: 'Today',     accent: 'text-blue-600',   bg: 'bg-blue-50',   border: 'border-blue-200' },
-  { id: 'waiting',  label: 'Wait / Delegate', accent: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
-  { id: 'tomorrow', label: 'Tomorrow',  accent: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200' },
   { id: 'soon',     label: 'This Week', accent: 'text-violet-600', bg: 'bg-violet-50', border: 'border-violet-200' },
-  { id: 'someday',  label: 'Later',     accent: 'text-gray-500',   bg: 'bg-gray-50',   border: 'border-gray-200' },
+  { id: 'anytime',  label: 'Anytime',   accent: 'text-sky-600',    bg: 'bg-sky-50',    border: 'border-sky-200' },
+  { id: 'someday',  label: 'Someday',   accent: 'text-gray-500',   bg: 'bg-gray-50',   border: 'border-gray-200' },
+  { id: 'waiting',  label: 'Wait / Delegate', accent: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
 ]
 
 const PROJECT_COLORS = {
@@ -57,10 +57,9 @@ export default function AgendaView({ filters }) {
     : tasks.filter((t) => !t.completed)
 
   if (filters.starred) visibleTasks = visibleTasks.filter((t) => t.starred)
-  if (filters.priorities.length > 0) visibleTasks = visibleTasks.filter((t) => filters.priorities.includes(t.priority))
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId)
-  const hasActiveFilters = filters.starred || filters.priorities.length > 0
+  const hasActiveFilters = filters.starred
 
   const getProjectName = (projectId) => {
     const p = projects.find((proj) => proj.id === projectId)
@@ -70,7 +69,7 @@ export default function AgendaView({ filters }) {
   const handleStar = (e, task) => {
     e.stopPropagation()
     if (!task.starred) {
-      updateTask(task.id, { starred: true, sortWeight: Date.now(), priority: 'high' })
+      updateTask(task.id, { starred: true, sortWeight: Date.now() })
     } else {
       updateTask(task.id, { starred: false })
     }
@@ -130,9 +129,7 @@ export default function AgendaView({ filters }) {
                       key={task.id}
                       onClick={() => setSelectedTask(task)}
                       className={`group flex items-center gap-3 px-4 py-2.5 bg-white rounded-xl border border-gray-100 hover:border-gray-200 hover:shadow-sm transition-all cursor-pointer ${
-                        task.priority === 'high' ? 'border-l-[3px] border-l-emerald-500' :
-                        task.priority === 'medium' ? 'border-l-[3px] border-l-amber-400' :
-                        task.priority === 'low' ? 'border-l-[3px] border-l-violet-400' : ''
+                        (!task.projectId || task.projectId === 'unassigned') ? 'border-l-[3px] border-l-amber-400' : ''
                       }`}
                     >
                       {/* Done button */}

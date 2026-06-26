@@ -2,12 +2,6 @@ import { useState } from 'react'
 import useStore from '../store'
 import { getUserByEmail } from '../users'
 
-const PRIORITY_BORDER = {
-  high:   'border-l-[3px] border-l-emerald-500',
-  medium: 'border-l-[3px] border-l-amber-400',
-  low:    'border-l-[3px] border-l-violet-400',
-}
-
 export default function TaskCard({ task, onClick }) {
   const { updateTask, deleteTask } = useStore()
   const user = useStore((s) => s.user)
@@ -26,7 +20,7 @@ export default function TaskCard({ task, onClick }) {
   const handleStar = (e) => {
     e.stopPropagation()
     if (!task.starred) {
-      updateTask(task.id, { starred: true, sortWeight: Date.now(), priority: 'high' })
+      updateTask(task.id, { starred: true, sortWeight: Date.now() })
     } else {
       updateTask(task.id, { starred: false })
     }
@@ -38,8 +32,8 @@ export default function TaskCard({ task, onClick }) {
   }
 
   const isUnassigned = !task.projectId || task.projectId === 'unassigned'
-  // Priority stripe wins if set; otherwise an amber stripe flags unassigned (un-triaged) cards.
-  const borderClass = PRIORITY_BORDER[task.priority] || (isUnassigned ? 'border-l-[3px] border-l-amber-400' : '')
+  // Amber stripe flags unassigned (un-triaged) captures so they stand out for triage.
+  const borderClass = isUnassigned ? 'border-l-[3px] border-l-amber-400' : ''
 
   return (
     <div
